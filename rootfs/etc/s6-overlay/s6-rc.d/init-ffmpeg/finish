@@ -1,0 +1,4 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+
+pkill -9 python3

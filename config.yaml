@@ -1,0 +1,27 @@
+---
+name: A9 Camera fake server
+version: 1
+slug: a9-cam
+description: A9 Cam fake server
+url: https://github.com/dbuezas/a9-camera-ha-add-on
+advanced: true
+startup: application
+init: false
+homeassistant: 0.92.0b2
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+host_network: true
+# ports_description:
+#   80/tcp: The local server where the stream is exposed
+#   29940/tcp: unknown
+#   6123/tcp: unknown
+#   53221/tcp: unknown
+#   41234/tcp: unknown
+ports:
+  6123/tcp: 6123
+  80/tcp: 80
+  6123/udp: 6123
