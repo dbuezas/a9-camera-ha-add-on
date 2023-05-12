@@ -28,6 +28,8 @@ streams:
 - [x] Find the correct way to configure ffmpeg to interprete the raw streams correctly
 - [ ] Expose the commands to toggle IR mode and other options via UDP as entities
 - [ ] Expose entities containing the status of the camera as fetched via UDP
+- [ ] Make the structure of this repo compliant so it can be installed more easily
+- [ ] Find out how to get the low delay of opuslib without getting broken audio.
 
 ## Credits & details
 
