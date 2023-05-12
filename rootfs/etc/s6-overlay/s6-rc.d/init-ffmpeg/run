@@ -1,5 +1,4 @@
 #!/command/with-contenv bashio
 # shellcheck shell=bash
 
-python3 /usr/local/a9-v720/src/a9_naxclow.py -s -i
-
+python3 /usr/local/a9-v720/src/a9_naxclow.py -s

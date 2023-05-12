@@ -1,0 +1,7 @@
+**/__pycache__/**
+*.avi
+*.log
+*.wav
+*.mjpg
+*.pcap
+nohup.out
