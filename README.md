@@ -2,23 +2,25 @@
 
 ## Instructions
 
-Until I make give this the correct structure to be installed in a standard way, the steps are: 0. Get the camera to connect to your access point (with the app or following instructions in https://github.com/intx82/a9-v720) 0. Reroute \*.naxclow.com to your HA computer IP (e.g using the AdGuard addon and configuring your router to use that as DNS provider)
+Until I make give this the correct structure to be installed in a standard way, the steps are:
 
-1. Download all the code in here and put it inside the `~/addons/a9-v720`
-2. [![Open your Home Assistant instance and show the Supervisor add-on store.](https://my.home-assistant.io/badges/supervisor_store.svg)](https://my.home-assistant.io/redirect/supervisor_store/)
-3. Click on the three dots overflow menu on the top right, then `Check for updates`
-4. There should now be a "A9 Fake camera server" addon.
-5. Install and start it.
-6. Go to logs, grab the ID of your cameras (leave it running for half an hour if you have cameras with new FW version)
-7. Learn & Install the Go2rpc addon, and WebRTC custom card
-8. in go2rtc.yaml, add:
+1. Get the camera to connect to your access point (with the app or following instructions in https://github.com/intx82/a9-v720)
+2. Reroute \*.naxclow.com to your HA computer IP (e.g using the AdGuard addon and configuring your router to use that as DNS provider)
+3. Download all the code in here and put it inside the `~/addons/a9-v720`
+4. [![Open your Home Assistant instance and show the Supervisor add-on store.](https://my.home-assistant.io/badges/supervisor_store.svg)](https://my.home-assistant.io/redirect/supervisor_store/)
+5. Click on the three dots overflow menu on the top right, then `Check for updates`
+6. There should now be a "A9 Fake camera server" addon.
+7. Install and start it.
+8. Go to logs, grab the ID of your cameras (leave it running for half an hour if you have cameras with new FW version)
+9. Learn & Install the Go2rpc addon, and WebRTC custom card
+10. in go2rtc.yaml, add:
 
 ```yaml
 streams:
-  v9_camera: ffmpeg:http://127.0.0.1:80/dev/[your-cam_id]/stream#video=h264#audio=copy
+  v9_camera: ffmpeg:http://127.0.0.1:80/dev/[your-cam_id]/go2rtc-stream#video=h264#audio=copy
 ```
 
-9. I didn't realise how complex this was. But you are done! you can use `v9_camera` in your WebRTC cards now.
+11. I didn't realise how complex this was. But you are done! you can use `v9_camera` in your WebRTC cards now.
 
 ## ToDo:
 
@@ -26,10 +28,10 @@ streams:
 - [x] Create an endpoint with merged video and audio with ffmpeg and named pipes
 - [x] Remove OpenCV requirement so the server can run in an Alpine docker base
 - [x] Find the correct way to configure ffmpeg to interprete the raw streams correctly
-- [ ] Expose the commands to toggle IR mode and other options via UDP as entities
-- [ ] Expose entities containing the status of the camera as fetched via UDP
+- [x] Expose the commands to toggle IR mode and other options via UDP
+- [ ] Expose status and toggles as entities
 - [ ] Make the structure of this repo compliant so it can be installed more easily
-- [ ] Find out how to get the low delay of opuslib without getting broken audio.
+- [x] Find out how to get the low delay of opuslib without getting broken audio.
 
 ## Credits & details
 
