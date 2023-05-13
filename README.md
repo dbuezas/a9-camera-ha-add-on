@@ -11,16 +11,20 @@ Until I make give this the correct structure to be installed in a standard way, 
 5. Click on the three dots overflow menu on the top right, then `Check for updates`
 6. There should now be a "A9 Fake camera server" addon.
 7. Install and start it.
-8. Go to logs, grab the ID of your cameras (leave it running for half an hour if you have cameras with new FW version)
-9. Learn & Install the Go2rpc addon, and WebRTC custom card
-10. in go2rtc.yaml, add:
+8. (restart the camera if you have one with newer FW version)
+9. Go the the Addon UI and you are done!
+
+### go2rtc
+
+1. Learn & Install the Go2rpc addon, and WebRTC custom card
+2. in go2rtc.yaml, add:
 
 ```yaml
 streams:
   v9_camera: ffmpeg:http://127.0.0.1:80/dev/[your-cam_id]/go2rtc-stream#video=h264#audio=copy
 ```
 
-11. I didn't realise how complex this was. But you are done! you can use `v9_camera` in your WebRTC cards now.
+11. You can use `v9_camera` in your WebRTC cards now.
 
 ## ToDo:
 
@@ -40,6 +44,8 @@ This addon https://github.com/dbuezas/a9-camera-ha-add-on
 Python code derived from https://github.com/intx82/a9-v720/ with these changes:
 
 - Added endpoint for a combined audio+video stream via ffmpeg
+- Added a web page with all devices & links
+- Added endpoint to send basic commands (flip, ir) via web page
 - Removed all features not strictly required for streaming video
 - Removed all dependencies not needed for streaming video (particularly open-cv, which doesn't run in alpine)
 

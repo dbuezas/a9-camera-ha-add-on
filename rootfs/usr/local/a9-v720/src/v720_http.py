@@ -59,7 +59,10 @@ class v720_http(log, BaseHTTPRequestHandler):
 
     def __new__(cls, *args, **kwargs) -> v720_http:
         ret = super(v720_http, cls).__new__(cls)
-        cls._dev_hnds["stream"] = ret.__stream_hnd
+        cls._dev_hnds["browser-stream"] = ret.__browser_stream_hnd
+        cls._dev_hnds["go2rtc-stream"] = ret.__go2rtc_stream_hnd
+        cls._dev_hnds["audio"] = ret.__audio_stream_hnd
+        cls._dev_hnds["live"] = ret.__live_hnd
         cls._dev_hnds["snapshot"] = ret.__snapshot_hnd
         cls._dev_hnds["cmd"] = ret.__cmd_hnd
         return ret
@@ -72,48 +75,79 @@ class v720_http(log, BaseHTTPRequestHandler):
         except ConnectionResetError:
             self.err(f'Connection closed by peer @ ({self.client_address[0]})')
 
-    def __stream_hnd(self, dev: v720_sta):
+    def __browser_stream_hnd(self, dev: v720_sta):
+        get_command = lambda audio_fifo_path,video_fifo_path:['ffmpeg',
+                    '-thread_queue_size', '512',
+                    '-use_wallclock_as_timestamps', '1',
+                    '-f', 'alaw', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono', '-i', audio_fifo_path,
+                    '-use_wallclock_as_timestamps', '1',
+                    '-f', 'mjpeg', 
+                    '-framerate', '10', # input fps
+                    '-i', video_fifo_path,
+                    '-c:v', 'libvpx', '-b:v', '256k', '-deadline', 'realtime',
+                    '-c:a', 'libopus', '-b:a', '16k', '-af', 'adelay=0ms', 
+                    '-framerate', '10', # output fps
+                    '-f', 'webm', 'pipe:1',
+                   ]
+        return self.__stream(dev,get_command)
+    
+    def __go2rtc_stream_hnd(self, dev: v720_sta):
+        get_command = lambda audio_fifo_path,video_fifo_path:['ffmpeg',
+                   '-thread_queue_size', '512',
+                   '-use_wallclock_as_timestamps', '1',
+                   '-f', 'alaw', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono', '-i', audio_fifo_path,
+                   '-use_wallclock_as_timestamps', '1',
+                   '-f', 'mjpeg', '-i', video_fifo_path,
+                   '-c:v', 'copy',
+                   '-c:a', 'libopus', '-b:a', '16k', '-af', 'adelay=0ms', 
+                   '-f', 'matroska', 'pipe:1',
+                   ]
+        return self.__stream(dev,get_command)
+    
+    def __audio_stream_hnd(self, dev: v720_sta):
+        get_command = lambda audio_fifo_path,video_fifo_path:['ffmpeg',
+                   '-thread_queue_size', '512',
+                   '-use_wallclock_as_timestamps', '1',
+                   '-f', 'alaw', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono', '-i', audio_fifo_path,
+                   '-c:a', 'mp3', '-b:a', '32k', '-af', 'adelay=0ms', 
+                   '-f', 'mp3', 'pipe:1',
+                   ]
+        return self.__stream(dev,get_command)
+        
+    
+    def __stream(self, dev: v720_sta, get_command ):
+        self.warn(f'Live stream request @ {dev.id} ({self.client_address[0]})')
         id = str(uuid.uuid4())
         audio_fifo_path = '/tmp/audio_fifo_'+id
         video_fifo_path = '/tmp/video_fifo_'+id
-
+        command = get_command(audio_fifo_path, video_fifo_path)
         os.mkfifo(audio_fifo_path)
         os.mkfifo(video_fifo_path)
-
-        command = ['ffmpeg',
-                   '-rtbufsize', '0',
-                   '-use_wallclock_as_timestamps', '1',
-                   '-f', 'alaw', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono', '-i', audio_fifo_path,
-                   '-rtbufsize', '0',
-                   '-use_wallclock_as_timestamps', '1',
-                   '-f', 'mjpeg', '-i', video_fifo_path,
-                   '-c:v', 'copy', # '-b:v', '64k' ,
-                   '-c:a', 'libopus', '-b:a', '16k', '-af', 'adelay=0ms', 
-                   '-f', 'matroska', 'pipe:1',
-                   '-loglevel', 'verbose',
-                   ]
-
+        
         ffmpeg = subprocess.Popen(command, stdout=subprocess.PIPE)
 
-        def track_thread(q: Queue, pipe_path: str):
+        def track_cb(q: Queue, pipe_path: str):
             pipe = os.open(pipe_path, os.O_WRONLY)
             while True:
-                frame = q.get(timeout=15)
+                frame = q.get(timeout=10)
                 if (frame == None):
                     os.close(pipe)
                     os.unlink(pipe_path)
                     break
                 os.write(pipe, frame)
+        def ffmpeg_cb(q: Queue, ffmpeg):
+            while True:
+                q.put(ffmpeg.stdout.read1(10240))
+                
         audio_queue = Queue(1024)
         video_queue = Queue(1024)
+        out_queue = Queue(1024)
 
-        audio_thread = threading.Thread(
-            target=track_thread, args=(audio_queue, audio_fifo_path))
-        video_thread = threading.Thread(
-            target=track_thread, args=(video_queue, video_fifo_path))
+        audio_thread = threading.Thread(target=track_cb, args=(audio_queue, audio_fifo_path))
         audio_thread.start()
+        video_thread = threading.Thread(target=track_cb, args=(video_queue, video_fifo_path))
         video_thread.start()
-
+        threading.Thread(target=ffmpeg_cb, args=(out_queue, ffmpeg)).start()
         def _on_audio_frame(dev, frame):
             audio_queue.put_nowait(frame)
 
@@ -123,51 +157,80 @@ class v720_http(log, BaseHTTPRequestHandler):
         dev.set_aframe_cb(_on_audio_frame)
         dev.set_vframe_cb(_on_video_frame)
 
-        def ffmpeg_cb(q: Queue, ffmpeg):
-            while True:
-                q.put(ffmpeg.stdout.read1(128))
-        out_queue = Queue(1024)
-
-        out_thread = threading.Thread(
-            target=ffmpeg_cb, args=(out_queue, ffmpeg))
-        out_thread.start()
         try:
-            self.warn(
-                f'Live stream request @ {dev.id} ({self.client_address[0]})')
             dev.cap_live()
             self.send_response(200)
             self.send_header('Content-type', 'video/mp4')
             self.end_headers()
             while not self.wfile.closed:
-                frame = out_queue.get(timeout=15)
-                if (frame == None):
-                    break
+                frame = out_queue.get(timeout=10)
                 self.wfile.write(frame)
 
         except Empty:
-            # tODO timeout stdout read
             self.err('Camera request timeout')
-            self.send_response(
-                502, f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
+            self.send_response(502, f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
         except BrokenPipeError:
-            self.err(
-                f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
+            self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
+        except KeyboardInterrupt:
+            self.err(f'Keyboard closing @ {dev.id} ({self.client_address[0]})')
+            
         finally:
             dev.cap_stop()
-            audio_queue.put(None)
-            video_queue.put(None)
-            out_queue.put(None)
             dev.unset_vframe_cb(_on_video_frame)
             dev.unset_aframe_cb(_on_audio_frame)
             ffmpeg.kill()
+            audio_queue.put(None)
+            video_queue.put(None)
+            audio_thread.join()
+            video_thread.join()
 
         try:
             self.send_header('Content-length', 0)
             self.send_header('Connection', 'close')
             self.end_headers()
         except BrokenPipeError:
-            self.err(
-                f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
+            self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
+
+    def __live_hnd(self, dev):
+        q = Queue(1024) # 15kb * 1024 ~ 15mb per camera
+        def _on_video_frame(dev, frame):
+            q.put(frame)
+
+        dev.set_vframe_cb(_on_video_frame)
+        
+        try:
+            self.warn(f'Live video request @ {dev.id} ({self.client_address[0]})')
+            self.send_response(200)
+            self.send_header('Connection', 'keep-alive')
+            self.send_header('Age', 0)
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Content-type', 'multipart/x-mixed-replace; boundary="jpgboundary"')
+            self.end_headers()
+            dev.cap_live()
+            while not self.wfile.closed:
+                img = q.get(timeout=5)
+                self.wfile.write(b"--jpgboundary\r\n")
+                self.send_header('Content-type', 'image/jpeg')
+                # self.send_header('Content-length', len(img))
+                self.end_headers()
+                self.wfile.write(img)
+                self.wfile.write(b'\r\n')
+
+        except Empty:
+            self.err('Camera request timeout')
+            self.send_response(502, f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
+        except BrokenPipeError:
+            self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
+        finally:
+            dev.unset_vframe_cb(_on_video_frame)
+            dev.cap_stop()
+
+        try:
+            self.send_header('Content-length', 0)
+            self.send_header('Connection', 'close')
+            self.end_headers()
+        except BrokenPipeError:
+            self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
 
     def __snapshot_hnd(self, dev):
         self.warn(f'Snapshot request @ {dev.id} ({self.client_address[0]})')
@@ -189,11 +252,9 @@ class v720_http(log, BaseHTTPRequestHandler):
 
         except Empty:
             self.err('Camera request timeout')
-            self.send_response(
-                502, f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
+            self.send_response(502, f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
         except (BrokenPipeError, ConnectionResetError):
-            self.err(
-                f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
+            self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
         finally:
             dev.unset_vframe_cb(_on_video_frame)
             dev.cap_stop()
@@ -240,73 +301,10 @@ class v720_http(log, BaseHTTPRequestHandler):
         self.send_header('Connection', 'close')
         self.end_headers()
 
-        # Here's the HTML content you want to send
-        html = """
-        <html>
-        <head>
-            <style>
-                body {
-                    background: white;
-                }
-            </style>
-        </head>
-        <script>
-            function call(event) {
-                event.preventDefault();  // Stop the link from being followed
-                fetch(event.target.href)
-            }
-            var base = document.createElement('base');
-            base.href = window.location.protocol + '//' + window.location.hostname + ':80';
-            document.getElementsByTagName('head')[0].appendChild(base);
-            const update = async () =>{
-                let list = [];
-                let html = ''
-                try {
-                    list = await (await fetch("/dev/list")).json();
-                    html += '<p> CONNECTED </p>';
-                } catch (e){
-                    html += '<p> DISCONNECTED </p>';
-                }
-                
-                for (const { host, port, uid } of list) {
-                    html += `<h3>${host}:${port} ${uid}</h3>`
-                    html += `
-                    <ul>
-                        <li><a href="/dev/${uid}/stream" target="_blank">stream</a></li>
-                        <li><a href="/dev/${uid}/snapshot" target="_blank">snapshot</a></li>
-                        <li><a href="/dev/${uid}/cmd?code=299&reboot=1" onclick="call(event)">Reboot</a>
-                        <li>IrLed:
-                            <a href="/dev/${uid}/cmd?code=202&IrLed=0" onclick="call(event)">OFF</a>
-                            <a href="/dev/${uid}/cmd?code=202&IrLed=1" onclick="call(event)">ON</a>
-                        </li>
-                        <li>mirrorFlip:
-                            <a href="/dev/${uid}/cmd?code=216&mirrorFlip=0" onclick="call(event)">OFF</a>
-                            <a href="/dev/${uid}/cmd?code=216&mirrorFlip=4" onclick="call(event)">ON</a>
-                        </li>
-                        <li>Power led:
-                            <a href="/dev/${uid}/cmd?code=210&instLed=0" onclick="call(event)">OFF</a>
-                            <a href="/dev/${uid}/cmd?code=210&instLed=1" onclick="call(event)">ON</a>
-                        </li>
-                        <li>LedEI:
-                            <a href="/dev/${uid}/cmd?code=220&ledEI=0&lightGrade=0" onclick="call(event)">OFF</a>
-                            <a href="/dev/${uid}/cmd?code=220&ledEI=1&lightGrade=1" onclick="call(event)">ON</a>
-                        </li>
-                    </ul>
-                    `
-                }
-                document.getElementById("content").innerHTML = html
-            }
-            setInterval(update, 500);
-        </script>
-        <body>
-            <h1>A9 server</h1>
-            <div id="content">Loadiing</div>
-        </body>
-        </html>
-        """
+        html_file_path = os.path.join(os.path.dirname(__file__), 'homepage.html')
+        with open(html_file_path, 'r', encoding='utf-8') as file:
+            self.wfile.write(bytes(file.read(), "utf8"))
 
-        # Write content as utf-8 data
-        self.wfile.write(bytes(html, "utf8"))
     def do_GET(self):
         url = urlparse(self.path)
         _path = url.path[1:].split('/')
@@ -335,7 +333,7 @@ class v720_http(log, BaseHTTPRequestHandler):
             'Content-Type: application/json',
             'Connection: keep-alive',
         ]
-        self.info(f'POST {self.path}')
+        self.warn(f'POST {self.path}')
         if self.path.startswith('/app/api/ApiSysDevicesBatch/registerDevices'):
             ret = {"code": 200, "message": "OK",
                    "data": f"0800c00{random.randint(0,99999):05d}"}
