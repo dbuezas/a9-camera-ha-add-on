@@ -4,7 +4,7 @@ import argparse
 from log import log
 import logging
 
-from v720_sta import start_srv
+from v720_sta import start_srv, print_urls
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -21,8 +21,5 @@ if __name__ == '__main__':
         log.set_log_lvl(logging.WARN)
 
     if args.server:
-        print(f'''-------- A9 V720 fake-server starting. --------
-\033[92mStream: http://127.0.0.1:{args.proxy_port}/dev/[CAM-ID]/stream
-Snapshot: http://127.0.0.1:{args.proxy_port}/dev/[CAM-ID]/snapshot\033[0m
-''')
+        print_urls("127.0.0.1", args.proxy_port, None)
         start_srv(args.proxy_port)

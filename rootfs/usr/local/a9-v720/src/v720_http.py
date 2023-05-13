@@ -8,6 +8,7 @@ import os
 import subprocess
 import threading
 import uuid
+from urllib.parse import urlparse, parse_qs
 
 from queue import Queue, Empty
 import socket
@@ -60,6 +61,7 @@ class v720_http(log, BaseHTTPRequestHandler):
         ret = super(v720_http, cls).__new__(cls)
         cls._dev_hnds["stream"] = ret.__stream_hnd
         cls._dev_hnds["snapshot"] = ret.__snapshot_hnd
+        cls._dev_hnds["cmd"] = ret.__cmd_hnd
         return ret
 
     def __init__(self, request, client_address, server) -> None:
@@ -85,7 +87,7 @@ class v720_http(log, BaseHTTPRequestHandler):
                    '-rtbufsize', '0',
                    '-use_wallclock_as_timestamps', '1',
                    '-f', 'mjpeg', '-i', video_fifo_path,
-                   '-c:v', 'copy', '-c:a', 'aac',
+                   '-c:v', 'copy', '-c:a', 'libopus', '-af', 'adelay=0ms',
                    '-f', 'matroska', 'pipe:1',
                    '-loglevel', 'verbose',
                    ]
@@ -193,10 +195,29 @@ class v720_http(log, BaseHTTPRequestHandler):
         finally:
             dev.unset_vframe_cb(_on_video_frame)
             dev.cap_stop()
+    def __cmd_hnd(self, dev: v720_sta):
+        self.warn(f'Cmd request @ {dev.id} ({self.client_address[0]})')
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Connection', 'close')
+        self.end_headers()
+        
+        parsed_path = urlparse(self.path)
+        params = parse_qs(parsed_path.query)
+        # Convert the parameters to a dictionary with single values
+        cmd = {}
+        for k, v in params.items():
+            # Check if the value is a digit and convert accordingly
+            cmd[k] = int(v[0]) if v[0].isdigit() else v[0]
+
+        self.wfile.write(json.dumps(cmd).encode('utf-8'))
+        dev.send_command(cmd)
+    
 
     def do_GET(self):
-        _path = self.path[1:].split('/')
-        if len(_path) >= 3 and \
+        _path = urlparse(self.path).path[1:].split('/')
+        
+        if len(_path) == 3 and \
                 _path[0] == 'dev' and \
                 _path[1] in v720_http._dev_lst:
             _cmd = _path[2]
@@ -204,16 +225,6 @@ class v720_http(log, BaseHTTPRequestHandler):
             if _cmd in self._dev_hnds:
                 _dev = v720_http._dev_lst[_path[1]]
                 self._dev_hnds[_cmd](_dev)
-            if _cmd == 'send':
-                # /dev/88322349423934/send/1 or 0
-                dev: v720_sta = v720_http._dev_lst[_path[1]]
-                x = _cmd = _path[3]
-                import cmd_udp
-                cmd = {
-                    'code': cmd_udp.CODE_FORWARD_DEV_IR_LED,
-                    'IrLed': int(x)
-                }
-                dev.send_command(cmd)
         else:
             self.info(f'GET unknown path: {self.path}')
             self.send_error(404, 'Not found')

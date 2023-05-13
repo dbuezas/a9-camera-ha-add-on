@@ -286,7 +286,7 @@ class v720_sta(log):
         resp = self.__prep_fwd(json)
         self.warn(f'Send ir command: {resp}')
         self._tcp.send(resp.req())
-
+    
     def cap_live(self):
         self.__send_nat_probe(self._tcp)
 
@@ -382,7 +382,16 @@ class v720_sta(log):
                 for cb in self._vframe_cb:
                     cb(self, pkg.payload)
 
-
+def print_urls(host:str, port:str, id:str|None):
+        if id:
+            print(f'''-------- Found device {id} --------''')
+        else:
+            print(f'''-------- A9 V720 fake-server starting. --------''')
+        print(f'''\033[92mStream: http://{host}:{port}/dev/{id}/stream
+Snapshot: http://{host}:{port}/dev/{id}/snapshot
+IrLed: http://{host}:{port}/dev/{id}/cmd?code=202&IrLed=1
+Flip: http://{host}:{port}/dev/{id}/cmd?code=216&mirrorFlip=4\033[0m
+''')
 def start_srv(_http_port):
     from v720_http import v720_http
 
@@ -390,10 +399,7 @@ def start_srv(_http_port):
     _mtx = threading.Lock()
 
     def on_init_done(dev: v720_sta):
-        print(f'''-------- Found device {dev.id} --------
-\033[92mStream: http://127.0.0.1:{_http_port}/dev/{dev.id}/stream\033[0m
-Snapshot: http://127.0.0.1:{_http_port}/dev/{dev.id}/snapshot\033[0m
-''')
+        print_urls("127.0.0.1", _http_port, dev.id)
         v720_http.add_dev(dev)
 
     def on_disconnect_dev(dev: v720_sta):
