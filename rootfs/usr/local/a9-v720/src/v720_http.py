@@ -83,11 +83,12 @@ class v720_http(log, BaseHTTPRequestHandler):
         command = ['ffmpeg',
                    '-rtbufsize', '0',
                    '-use_wallclock_as_timestamps', '1',
-                   '-f', 'alaw', '-ar', '8000', '-ac', '1', '-i', audio_fifo_path,
+                   '-f', 'alaw', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono', '-i', audio_fifo_path,
                    '-rtbufsize', '0',
                    '-use_wallclock_as_timestamps', '1',
                    '-f', 'mjpeg', '-i', video_fifo_path,
-                   '-c:v', 'copy', '-c:a', 'libopus', '-af', 'adelay=0ms',
+                   '-c:v', 'copy', # '-b:v', '64k' ,
+                   '-c:a', 'libopus', '-b:a', '16k', '-af', 'adelay=0ms', 
                    '-f', 'matroska', 'pipe:1',
                    '-loglevel', 'verbose',
                    ]
@@ -152,9 +153,10 @@ class v720_http(log, BaseHTTPRequestHandler):
             self.err(
                 f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
         finally:
+            dev.cap_stop()
             audio_queue.put(None)
             video_queue.put(None)
-            dev.cap_stop()
+            out_queue.put(None)
             dev.unset_vframe_cb(_on_video_frame)
             dev.unset_aframe_cb(_on_audio_frame)
             ffmpeg.kill()
@@ -212,12 +214,94 @@ class v720_http(log, BaseHTTPRequestHandler):
 
         self.wfile.write(json.dumps(cmd).encode('utf-8'))
         dev.send_command(cmd)
-    
 
+    def __dev_list(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Connection', 'close')
+        self.end_headers()
+        _devs = []
+        for _id in v720_http._dev_lst.keys():
+            _dev = v720_http._dev_lst[_id]
+            _devs.append({
+                'host': _dev.host,
+                'port': _dev.port,
+                'uid': _id
+            })
+
+        self.wfile.write(json.dumps(_devs).encode('utf-8'))
+    
+    def __homepage(self):
+        self.info(f'GET device list: {self.path}')
+        self.send_response(200)
+        self.send_header('Content-type','text/html')
+        self.send_header('Connection', 'close')
+        self.end_headers()
+
+        # Here's the HTML content you want to send
+        html = """
+        <html>
+        <script>
+            function call(event) {
+                event.preventDefault();  // Stop the link from being followed
+                fetch(event.target.href)
+            }
+            const update = async () =>{
+                let list = [];
+                let html = ''
+                try {
+                    list = await (await fetch("/dev/list")).json();
+                    html += '<p> CONNECTED </p>';
+                } catch (e){
+                    html += '<p> DISCONNECTED </p>';
+                }
+                
+                for (const { host, port, uid } of list) {
+                    html += `<h3>${host}:${port} ${uid}</h3>`
+                    html += `
+                    <ul>
+                        <li><a href="/dev/${uid}/stream" target="_blank">stream</a></li>
+                        <li><a href="/dev/${uid}/snapshot" target="_blank">snapshot</a></li>
+                        <li>IrLed:
+                            <a href="/dev/${uid}/cmd?code=202&IrLed=0" onclick="call(event)">OFF</a>
+                            <a href="/dev/${uid}/cmd?code=202&IrLed=1" onclick="call(event)">ON</a>
+                        </li>
+                        <li>mirrorFlip:
+                            <a href="/dev/${uid}/cmd?code=216&mirrorFlip=0" onclick="call(event)">OFF</a>
+                            <a href="/dev/${uid}/cmd?code=216&mirrorFlip=4" onclick="call(event)">ON</a>
+                        </li>
+                        <li>Power led:
+                            <a href="/dev/${uid}/cmd?code=210&instLed=0" onclick="call(event)">OFF</a>
+                            <a href="/dev/${uid}/cmd?code=210&instLed=1" onclick="call(event)">ON</a>
+                        </li>
+                        <li>LedEI:
+                            <a href="/dev/${uid}/cmd?code=220&ledEI=0&lightGrade=0" onclick="call(event)">OFF</a>
+                            <a href="/dev/${uid}/cmd?code=220&ledEI=1&lightGrade=1" onclick="call(event)">ON</a>
+                        </li>
+                    </ul>
+                    `
+                }
+                document.getElementById("content").innerHTML = html
+            }
+            setInterval(update, 500);
+        </script>
+        <body>
+            <h1>A9 server</h1>
+            <div id="content">Loadiing</div>
+        </body>
+        </html>
+        """
+
+        # Write content as utf-8 data
+        self.wfile.write(bytes(html, "utf8"))
     def do_GET(self):
-        _path = urlparse(self.path).path[1:].split('/')
-        
-        if len(_path) == 3 and \
+        url = urlparse(self.path)
+        _path = url.path[1:].split('/')
+        if len(_path) == 1:
+            self.__homepage()
+        elif self.path.startswith('/dev/list'):
+            self.__dev_list()
+        elif len(_path) == 3 and \
                 _path[0] == 'dev' and \
                 _path[1] in v720_http._dev_lst:
             _cmd = _path[2]
