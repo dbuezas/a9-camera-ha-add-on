@@ -201,6 +201,7 @@ class v720_http(log, BaseHTTPRequestHandler):
         self.warn(f'Cmd request @ {dev.id} ({self.client_address[0]})')
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')  # for ingress
         self.send_header('Connection', 'close')
         self.end_headers()
         
@@ -218,6 +219,7 @@ class v720_http(log, BaseHTTPRequestHandler):
     def __dev_list(self):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')  # for ingress
         self.send_header('Connection', 'close')
         self.end_headers()
         _devs = []
@@ -241,11 +243,21 @@ class v720_http(log, BaseHTTPRequestHandler):
         # Here's the HTML content you want to send
         html = """
         <html>
+        <head>
+            <style>
+                body {
+                    background: white;
+                }
+            </style>
+        </head>
         <script>
             function call(event) {
                 event.preventDefault();  // Stop the link from being followed
                 fetch(event.target.href)
             }
+            var base = document.createElement('base');
+            base.href = window.location.protocol + '//' + window.location.hostname + ':80';
+            document.getElementsByTagName('head')[0].appendChild(base);
             const update = async () =>{
                 let list = [];
                 let html = ''
@@ -262,6 +274,7 @@ class v720_http(log, BaseHTTPRequestHandler):
                     <ul>
                         <li><a href="/dev/${uid}/stream" target="_blank">stream</a></li>
                         <li><a href="/dev/${uid}/snapshot" target="_blank">snapshot</a></li>
+                        <li><a href="/dev/${uid}/cmd?code=299&reboot=1" onclick="call(event)">Reboot</a>
                         <li>IrLed:
                             <a href="/dev/${uid}/cmd?code=202&IrLed=0" onclick="call(event)">OFF</a>
                             <a href="/dev/${uid}/cmd?code=202&IrLed=1" onclick="call(event)">ON</a>
