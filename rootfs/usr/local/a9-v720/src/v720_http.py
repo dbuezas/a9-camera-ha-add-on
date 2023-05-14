@@ -137,7 +137,7 @@ class v720_http(log, BaseHTTPRequestHandler):
                 os.write(pipe, frame)
         def ffmpeg_cb(q: Queue, ffmpeg):
             while True:
-                q.put(ffmpeg.stdout.read1(10240))
+                q.put(ffmpeg.stdout.read1(512))
                 
         audio_queue = Queue(1024)
         video_queue = Queue(1024)
