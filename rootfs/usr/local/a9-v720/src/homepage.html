@@ -11,15 +11,12 @@
       event.preventDefault(); // Stop the link from being followed
       fetch(event.target.href);
     }
-    var base = document.createElement("base");
-    base.href =
-      window.location.protocol + "//" + window.location.hostname + ":80";
-    document.getElementsByTagName("head")[0].appendChild(base);
+
     const update = async () => {
       let list = [];
       let html = "";
       try {
-        list = await (await fetch("/dev/list")).json();
+        list = await (await fetch("dev/list")).json();
         html += "<p> CONNECTED </p>";
       } catch (e) {
         html += "<p> DISCONNECTED </p>";
@@ -29,27 +26,27 @@
         html += `<h3>${host}:${port} ${uid}</h3>`;
         html += `
             <ul>
-                <li><a target="_blank" href="/dev/${uid}/browser-stream">Browser Stream</a></li>
-                <li><a target="_blank" href="/dev/${uid}/go2rtc-stream">VLC/go2rtc Stream</a></li>
-                <li><a target="_blank" href="/dev/${uid}/live">MJPEG Stream (good for Generic Camera)</a></li>
-                <li><a target="_blank" href="/dev/${uid}/audio">Audio Stream</a></li>
-                <li><a target="_blank" href="/dev/${uid}/snapshot">Snapshot</a></li>
-                <li><a href="/dev/${uid}/cmd?code=299&reboot=1" onclick="call(event)">Reboot</a>
+                <li><a target="_blank" href="dev/${uid}/browser-stream">Browser Stream</a></li>
+                <li><a target="_blank" href="dev/${uid}/go2rtc-stream">VLC/go2rtc Stream</a></li>
+                <li><a target="_blank" href="dev/${uid}/live">MJPEG Stream (good for Generic Camera)</a></li>
+                <li><a target="_blank" href="dev/${uid}/audio">Audio Stream</a></li>
+                <li><a target="_blank" href="dev/${uid}/snapshot">Snapshot</a></li>
+                <li><a href="dev/${uid}/cmd?code=299&reboot=1" onclick="call(event)">Reboot</a>
                 <li>IrLed:
-                    <a href="/dev/${uid}/cmd?code=202&IrLed=0" onclick="call(event)">OFF</a>
-                    <a href="/dev/${uid}/cmd?code=202&IrLed=1" onclick="call(event)">ON</a>
+                    <a href="dev/${uid}/cmd?code=202&IrLed=0" onclick="call(event)">OFF</a>
+                    <a href="dev/${uid}/cmd?code=202&IrLed=1" onclick="call(event)">ON</a>
                 </li>
                 <li>Mirror lmage:
-                    <a href="/dev/${uid}/cmd?code=216&mirrorFlip=0" onclick="call(event)">OFF</a>
-                    <a href="/dev/${uid}/cmd?code=216&mirrorFlip=4" onclick="call(event)">ON</a>
+                    <a href="dev/${uid}/cmd?code=216&mirrorFlip=0" onclick="call(event)">OFF</a>
+                    <a href="dev/${uid}/cmd?code=216&mirrorFlip=4" onclick="call(event)">ON</a>
                 </li>
                 <li>Power led:
-                    <a href="/dev/${uid}/cmd?code=210&instLed=0" onclick="call(event)">OFF</a>
-                    <a href="/dev/${uid}/cmd?code=210&instLed=1" onclick="call(event)">ON</a>
+                    <a href="dev/${uid}/cmd?code=210&instLed=0" onclick="call(event)">OFF</a>
+                    <a href="dev/${uid}/cmd?code=210&instLed=1" onclick="call(event)">ON</a>
                 </li>
                 <li>LedEI:
-                    <a href="/dev/${uid}/cmd?code=220&ledEI=0&lightGrade=0" onclick="call(event)">OFF</a>
-                    <a href="/dev/${uid}/cmd?code=220&ledEI=1&lightGrade=1" onclick="call(event)">ON</a>
+                    <a href="dev/${uid}/cmd?code=220&ledEI=0&lightGrade=0" onclick="call(event)">OFF</a>
+                    <a href="dev/${uid}/cmd?code=220&ledEI=1&lightGrade=1" onclick="call(event)">ON</a>
                 </li>
             </ul>
             `;
