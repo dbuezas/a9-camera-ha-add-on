@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 from datetime import datetime
 
 from log import log
@@ -11,15 +12,15 @@ from netsrv_udp import netsrv_udp
 import cmd_udp
 from prot_udp import prot_udp
 from prot_json_udp import prot_json_udp
-
+from watchdog import Watchdog
 
 class v720_sta(log):
     TCP_PORT = 6123
     UDP_PORT = 6123
     CLI_TG = '00112233445566778899aabbccddeeff'
     CLI_TKN = 'deadc0de'
-
-    def __init__(self, tcp_conn: netsrv_tcp, udp_conn: netsrv_udp = None, videoframe_cb: callable = None, audioframe_cb: callable = None, init_done_cb: callable = None, disconnect_cb: callable = None) -> None:
+    
+    def __init__(self, tcp_conn: netsrv_tcp, udp_conn: netsrv_udp = None, init_done_cb: callable = None, disconnect_cb: callable = None) -> None:
         super().__init__(f'V720-STA@{id(self):x}')
         self._raw_hnd_lst = {
             f'{cmd_udp.P2P_UDP_CMD_JSON}': self.__json_hnd,
@@ -49,13 +50,8 @@ class v720_sta(log):
 
         self._cb_mtx = threading.Lock()
         self._vframe_cb = []
-        if videoframe_cb is not None and callable(videoframe_cb):
-            self._vframe_cb.append(videoframe_cb)
-
         self._aframe_cb = []
-        if audioframe_cb is not None and callable(audioframe_cb):
-            self._aframe_cb.append(audioframe_cb)
-
+        
         self._init_done_cb = init_done_cb
         self._disconnect_cb = disconnect_cb
 
@@ -68,6 +64,8 @@ class v720_sta(log):
             self.set_udp_conn(udp_conn)
         else:
             self._udp = None
+        
+        self._watchdog = Watchdog(5, self.__cap_start)
 
     @property
     def id(self):
@@ -99,21 +97,25 @@ class v720_sta(log):
         if cb is not None and callable(cb):
             with self._cb_mtx:
                 self._vframe_cb.append(cb)
+                self.__maybe_cap_start()
 
     def unset_vframe_cb(self, cb):
         if cb in self._vframe_cb:
             with self._cb_mtx:
                 self._vframe_cb.remove(cb)
+                self.__maybe_cap_stop()
 
     def set_aframe_cb(self, cb: callable):
         if cb is not None and callable(cb):
             with self._cb_mtx:
                 self._aframe_cb.append(cb)
+                self.__maybe_cap_start()
 
     def unset_aframe_cb(self, cb):
         if cb in self._aframe_cb:
             with self._cb_mtx:
                 self._aframe_cb.remove(cb)
+                self.__maybe_cap_stop()
 
     def set_init_done_cb(self, cb: callable):
         if cb is not None and callable(cb):
@@ -287,15 +289,22 @@ class v720_sta(log):
         self.warn(f'Send ir command: {resp}')
         self._tcp.send(resp.req())
     
-    def cap_live(self):
+    def __maybe_cap_start(self):
+        if self._watchdog.enabled:
+            self.warn(f'Client already conected')
+            return
+        self._watchdog.start()
+        self.__cap_start()
+    
+    def __cap_start(self):
+        self._watchdog.reset()
         self.__send_nat_probe(self._tcp)
 
-    def cap_stop(self):
-        with self._cb_mtx:
-            if len(self._vframe_cb) > 1:
-                self.warn(f'Client still conected')
-                return
-
+    def __maybe_cap_stop(self):
+        self.warn(f'Maybe close: Clients still conected: {len(self._vframe_cb)}')
+        if len(self._vframe_cb) > 0 or len(self._aframe_cb)>0:
+            return
+        self._watchdog.stop()
         resp = self.__prep_fwd({
             'code': cmd_udp.CODE_FORWARD_CLOSE_A_CLOSE_V
         })
@@ -351,6 +360,7 @@ class v720_sta(log):
                 cb(self, pkg.payload)
 
     def __on_mjpg_rcv_hnd(self, conn: netsrv_udp, payload: bytes):
+        self._watchdog.reset()
         pkg = prot_udp.resp(payload)
         with self._frame_lst_mtx:
             self._frame_lst.append(pkg._pkg_id)

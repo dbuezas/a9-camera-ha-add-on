@@ -10,7 +10,7 @@ import threading
 import uuid
 from urllib.parse import urlparse, parse_qs
 
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 import socket
 from log import log
 
@@ -18,16 +18,28 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import netifaces
 from netcl_udp import netcl_udp
-import v720_sta
+from v720_sta import v720_sta 
 
 TCP_PORT = 6123
 HTTP_PORT = 80
 
-
+def put_nowait_or_clear_if_full(q:Queue, frame):
+    try:
+        q.put_nowait(frame)
+    except Full:
+        while not q.empty():
+            try:
+                q.get_nowait()
+            except q.Empty:
+                continue
+        put_nowait_or_clear_if_full(q, frame)
+        
 class v720_http(log, BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
     _dev_lst = {}
     _dev_hnds = {}
+    def log_message(self, format, *args):
+        return  # Disable logging
 
     @staticmethod
     def add_dev(dev):
@@ -89,7 +101,7 @@ class v720_http(log, BaseHTTPRequestHandler):
                     '-framerate', '10', # output fps
                     '-f', 'webm', 'pipe:1',
                    ]
-        return self.__stream(dev,get_command)
+        return self.__stream(dev, get_command, 'video/webm')
     
     def __go2rtc_stream_hnd(self, dev: v720_sta):
         get_command = lambda audio_fifo_path,video_fifo_path:['ffmpeg',
@@ -102,7 +114,7 @@ class v720_http(log, BaseHTTPRequestHandler):
                    '-c:a', 'libopus', '-b:a', '16k', '-af', 'adelay=0ms', 
                    '-f', 'matroska', 'pipe:1',
                    ]
-        return self.__stream(dev,get_command)
+        return self.__stream(dev, get_command, 'video/x-matroska')
     
     def __audio_stream_hnd(self, dev: v720_sta):
         get_command = lambda audio_fifo_path,video_fifo_path:['ffmpeg',
@@ -112,10 +124,18 @@ class v720_http(log, BaseHTTPRequestHandler):
                    '-c:a', 'mp3', '-b:a', '32k', '-af', 'adelay=0ms', 
                    '-f', 'mp3', 'pipe:1',
                    ]
-        return self.__stream(dev,get_command)
+        return self.__stream(dev, get_command, 'audio/mp3')
         
     
-    def __stream(self, dev: v720_sta, get_command ):
+    def __stream(self, dev: v720_sta, get_command, mime_type ):
+        self.send_response(200)
+        self.send_header('Content-type', mime_type)
+        self.send_header('Accept-Ranges', 'none')
+        self.end_headers()
+        if self.headers.get('Sec-Fetch-Dest') == 'document':
+            print("this was the doc")
+            return
+
         self.warn(f'Live stream request @ {dev.id} ({self.client_address[0]})')
         id = str(uuid.uuid4())
         audio_fifo_path = '/tmp/audio_fifo_'+id
@@ -129,15 +149,24 @@ class v720_http(log, BaseHTTPRequestHandler):
         def track_cb(q: Queue, pipe_path: str):
             pipe = os.open(pipe_path, os.O_WRONLY)
             while True:
-                frame = q.get(timeout=10)
-                if (frame == None):
-                    os.close(pipe)
-                    os.unlink(pipe_path)
-                    break
-                os.write(pipe, frame)
+                try:
+                    frame = q.get(timeout=1)
+                    if (frame == None):
+                        os.close(pipe)
+                        os.unlink(pipe_path)
+                        print(f'Deleting: {pipe_path}')
+                        break
+                    os.write(pipe, frame)
+                except Empty:
+                    # camera will be restarted in the main thread
+                    pass
         def ffmpeg_cb(q: Queue, ffmpeg):
             while True:
-                q.put(ffmpeg.stdout.read1(512))
+                data = ffmpeg.stdout.read1(16_384)
+                if (data == b''):
+                    #ffmpeg was killed
+                    return 
+                q.put_nowait(data)
                 
         audio_queue = Queue(1024)
         video_queue = Queue(1024)
@@ -147,7 +176,8 @@ class v720_http(log, BaseHTTPRequestHandler):
         audio_thread.start()
         video_thread = threading.Thread(target=track_cb, args=(video_queue, video_fifo_path))
         video_thread.start()
-        threading.Thread(target=ffmpeg_cb, args=(out_queue, ffmpeg)).start()
+        ffmpeg_thread = threading.Thread(target=ffmpeg_cb, args=(out_queue, ffmpeg))
+        ffmpeg_thread.start()
         def _on_audio_frame(dev, frame):
             audio_queue.put_nowait(frame)
 
@@ -157,41 +187,42 @@ class v720_http(log, BaseHTTPRequestHandler):
         dev.set_aframe_cb(_on_audio_frame)
         dev.set_vframe_cb(_on_video_frame)
 
+        
         try:
-            dev.cap_live()
-            self.send_response(200)
-            self.send_header('Content-type', 'video/mp4')
-            self.end_headers()
             while not self.wfile.closed:
-                frame = out_queue.get(timeout=10)
-                self.wfile.write(frame)
-
-        except Empty:
-            self.err('Camera request timeout')
-            self.send_response(502, f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
+                try:
+                    frame = out_queue.get(timeout=1)
+                    self.wfile.write(frame)
+                except Empty:
+                    self.err(f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
+                    # self.send_response(502, f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
         except BrokenPipeError:
-            self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
-        except KeyboardInterrupt:
-            self.err(f'Keyboard closing @ {dev.id} ({self.client_address[0]})')
+            self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]} __stream)')
             
         finally:
-            dev.cap_stop()
+            print('Killing ffmpeg')
+            ffmpeg.kill()
+            print('Unsetting cbs')
             dev.unset_vframe_cb(_on_video_frame)
             dev.unset_aframe_cb(_on_audio_frame)
-            ffmpeg.kill()
-            audio_queue.put(None)
-            video_queue.put(None)
+            print('Putting nones')
+            audio_queue.put(None) # stop the audio thread
+            video_queue.put(None) # stop the video thread
+            print('join audio')
             audio_thread.join()
+            print('join video')
             video_thread.join()
+            print('join ffmpeg')
+            ffmpeg_thread.join()
+            print('done closing')
+        # try:
+        #     self.send_header('Content-length', 0)
+        #     self.send_header('Connection', 'close')
+        #     self.end_headers()
+        # except BrokenPipeError:
+        #     self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
 
-        try:
-            self.send_header('Content-length', 0)
-            self.send_header('Connection', 'close')
-            self.end_headers()
-        except BrokenPipeError:
-            self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
-
-    def __live_hnd(self, dev):
+    def __live_hnd(self, dev: v720_sta):
         q = Queue(1024) # 15kb * 1024 ~ 15mb per camera
         def _on_video_frame(dev, frame):
             q.put(frame)
@@ -206,33 +237,31 @@ class v720_http(log, BaseHTTPRequestHandler):
             self.send_header('Pragma', 'no-cache')
             self.send_header('Content-type', 'multipart/x-mixed-replace; boundary="jpgboundary"')
             self.end_headers()
-            dev.cap_live()
             while not self.wfile.closed:
-                img = q.get(timeout=5)
-                self.wfile.write(b"--jpgboundary\r\n")
-                self.send_header('Content-type', 'image/jpeg')
-                # self.send_header('Content-length', len(img))
-                self.end_headers()
-                self.wfile.write(img)
-                self.wfile.write(b'\r\n')
-
-        except Empty:
-            self.err('Camera request timeout')
-            self.send_response(502, f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
+                try:
+                    img = q.get(timeout=5)
+                    self.wfile.write(b"--jpgboundary\r\n")
+                    self.send_header('Content-type', 'image/jpeg')
+                    # self.send_header('Content-length', len(img))
+                    self.end_headers()
+                    self.wfile.write(img)
+                    self.wfile.write(b'\r\n')
+                except Empty:
+                    self.err(f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
+                    # self.send_response(502, f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
         except BrokenPipeError:
             self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
         finally:
             dev.unset_vframe_cb(_on_video_frame)
-            dev.cap_stop()
 
         try:
             self.send_header('Content-length', 0)
             self.send_header('Connection', 'close')
             self.end_headers()
         except BrokenPipeError:
-            self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
+            self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]}) __mjpeg')
 
-    def __snapshot_hnd(self, dev):
+    def __snapshot_hnd(self, dev: v720_sta):
         self.warn(f'Snapshot request @ {dev.id} ({self.client_address[0]})')
         q = Queue(1)
 
@@ -241,8 +270,7 @@ class v720_http(log, BaseHTTPRequestHandler):
 
         dev.set_vframe_cb(_on_video_frame)
         try:
-            dev.cap_live()
-            img = q.get(timeout=5)
+            img = q.get(timeout=10)
             self.send_response(200)
             self.send_header('Content-type', 'image/jpeg')
             self.send_header('Content-length', len(img))
@@ -257,7 +285,7 @@ class v720_http(log, BaseHTTPRequestHandler):
             self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]})')
         finally:
             dev.unset_vframe_cb(_on_video_frame)
-            dev.cap_stop()
+
     def __cmd_hnd(self, dev: v720_sta):
         self.warn(f'Cmd request @ {dev.id} ({self.client_address[0]})')
         self.send_response(200)
@@ -318,6 +346,7 @@ class v720_http(log, BaseHTTPRequestHandler):
             _cmd = _path[2]
 
             if _cmd in self._dev_hnds:
+                self.warn(self.headers)
                 _dev = v720_http._dev_lst[_path[1]]
                 self._dev_hnds[_cmd](_dev)
         else:
