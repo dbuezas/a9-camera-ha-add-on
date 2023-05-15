@@ -88,63 +88,56 @@ class v720_http(log, BaseHTTPRequestHandler):
             self.err(f'Connection closed by peer @ ({self.client_address[0]})')
 
     def __browser_stream_hnd(self, dev: v720_sta):
-        get_command = lambda audio_fifo_path,video_fifo_path:['ffmpeg',
-                    '-thread_queue_size', '512',
-                    '-use_wallclock_as_timestamps', '1',
-                    '-f', 'alaw', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono', '-i', audio_fifo_path,
-                    '-use_wallclock_as_timestamps', '1',
-                    '-f', 'mjpeg', 
-                    '-framerate', '10', # input fps
-                    '-i', video_fifo_path,
-                    '-c:v', 'libvpx', '-b:v', '256k', '-deadline', 'realtime',
-                    '-c:a', 'libopus', '-b:a', '16k', '-af', 'adelay=0ms', 
-                    '-framerate', '10', # output fps
-                    '-f', 'webm', 'pipe:1',
-                   ]
-        return self.__stream(dev, get_command, 'video/webm')
+        get_command = lambda audio_fifo_path, video_fifo_path:['ffmpeg',
+            '-use_wallclock_as_timestamps', '1',
+            '-f', 'alaw', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono', '-i', audio_fifo_path,
+            '-use_wallclock_as_timestamps', '1',
+            '-f', 'mjpeg', 
+            '-framerate', '10', # input fps
+            '-i', video_fifo_path,
+            '-c:v', 'libvpx', '-b:v', '512k', '-deadline', 'realtime', '-cpu-used', '5',
+            '-c:a', 'libopus', '-b:a', '16k', '-af', 'adelay=0ms', 
+            '-framerate', '10', # output fps
+            '-f', 'webm', 'pipe:1',
+            ]
+        return self.__stream(dev, get_command, 'video/webm', audio=True, video=True)
     
     def __go2rtc_stream_hnd(self, dev: v720_sta):
-        get_command = lambda audio_fifo_path,video_fifo_path:['ffmpeg',
-                   '-thread_queue_size', '512',
-                   '-use_wallclock_as_timestamps', '1',
-                   '-f', 'alaw', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono', '-i', audio_fifo_path,
-                   '-use_wallclock_as_timestamps', '1',
-                   '-f', 'mjpeg', '-i', video_fifo_path,
-                   '-c:v', 'copy',
-                   '-c:a', 'libopus', '-b:a', '16k', '-af', 'adelay=0ms', 
-                   '-f', 'matroska', 'pipe:1',
-                   ]
-        return self.__stream(dev, get_command, 'video/x-matroska')
+        get_command = lambda audio_fifo_path, video_fifo_path:['ffmpeg',
+            '-use_wallclock_as_timestamps', '1',
+            '-f', 'alaw', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono', '-i', audio_fifo_path,
+            '-use_wallclock_as_timestamps', '1',
+            '-f', 'mjpeg', '-i', video_fifo_path,
+            '-c:v', 'copy',
+            '-c:a', 'libopus', '-b:a', '16k', '-af', 'adelay=0ms', 
+            '-f', 'matroska', 'pipe:1',
+            ]
+        return self.__stream(dev, get_command, 'video/x-matroska', audio=True, video=True)
     
     def __audio_stream_hnd(self, dev: v720_sta):
-        get_command = lambda audio_fifo_path,video_fifo_path:['ffmpeg',
-                   '-thread_queue_size', '512',
-                   '-use_wallclock_as_timestamps', '1',
-                   '-f', 'alaw', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono', '-i', audio_fifo_path,
-                   '-c:a', 'mp3', '-b:a', '32k', '-af', 'adelay=0ms', 
-                   '-f', 'mp3', 'pipe:1',
-                   ]
-        return self.__stream(dev, get_command, 'audio/mp3')
+        get_command = lambda audio_fifo_path, video_fifo_path:['ffmpeg',
+            '-thread_queue_size', '512',
+            '-use_wallclock_as_timestamps', '1',
+            '-f', 'alaw', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono', '-i', audio_fifo_path,
+            '-c:a', 'libopus', '-b:a', '32k', '-af', 'adelay=0ms', 
+            '-f', 'webm', 'pipe:1',
+            ]
+        return self.__stream(dev, get_command, 'audio/webm; codecs=opus',audio=True, video=False)
         
     
-    def __stream(self, dev: v720_sta, get_command, mime_type ):
+    def __stream(self, dev: v720_sta, get_command, mime_type, audio=True, video=True ):
         self.send_response(200)
         self.send_header('Content-type', mime_type)
         self.send_header('Accept-Ranges', 'none')
         self.end_headers()
         if self.headers.get('Sec-Fetch-Dest') == 'document':
-            print("this was the doc")
+            self.warn("Ignoring document request")
             return
 
         self.warn(f'Live stream request @ {dev.id} ({self.client_address[0]})')
         id = str(uuid.uuid4())
         audio_fifo_path = '/tmp/audio_fifo_'+id
         video_fifo_path = '/tmp/video_fifo_'+id
-        command = get_command(audio_fifo_path, video_fifo_path)
-        os.mkfifo(audio_fifo_path)
-        os.mkfifo(video_fifo_path)
-        
-        ffmpeg = subprocess.Popen(command, stdout=subprocess.PIPE)
 
         def track_cb(q: Queue, pipe_path: str):
             pipe = os.open(pipe_path, os.O_WRONLY)
@@ -152,69 +145,71 @@ class v720_http(log, BaseHTTPRequestHandler):
                 try:
                     frame = q.get(timeout=1)
                     if (frame == None):
+                        # This is how we ask the thread to terminate
                         os.close(pipe)
                         os.unlink(pipe_path)
-                        print(f'Deleting: {pipe_path}')
+                        self.dbg(f'Deleting: {pipe_path}')
                         break
                     os.write(pipe, frame)
                 except Empty:
-                    # camera will be restarted in the main thread
+                    # Camera has sent no frames for 1 second.
+                    # It will soon be restarted in the main thread by the watchdog
                     pass
+
+        if audio:
+            os.mkfifo(audio_fifo_path)
+            audio_queue = Queue(1024)
+            audio_thread = threading.Thread(target=track_cb, args=(audio_queue, audio_fifo_path))
+            audio_thread.start()
+            def _on_audio_frame(dev, frame):
+                audio_queue.put_nowait(frame)
+            dev.set_aframe_cb(_on_audio_frame)
+        if video:
+            os.mkfifo(video_fifo_path)
+            video_queue = Queue(1024)
+            video_thread = threading.Thread(target=track_cb, args=(video_queue, video_fifo_path))
+            video_thread.start()
+            def _on_video_frame(dev, frame):
+                video_queue.put_nowait(frame)
+            dev.set_vframe_cb(_on_video_frame)
+        
+        command = get_command(audio_fifo_path, video_fifo_path)
+        ffmpeg = subprocess.Popen(command, stdout=subprocess.PIPE)
         def ffmpeg_cb(q: Queue, ffmpeg):
             while True:
-                data = ffmpeg.stdout.read1(16_384)
+                data = ffmpeg.stdout.read1(1024)
                 if (data == b''):
-                    #ffmpeg was killed
+                    # ffmpeg was killed
+                    # This thread can be terminated
                     return 
                 q.put_nowait(data)
-                
-        audio_queue = Queue(1024)
-        video_queue = Queue(1024)
         out_queue = Queue(1024)
-
-        audio_thread = threading.Thread(target=track_cb, args=(audio_queue, audio_fifo_path))
-        audio_thread.start()
-        video_thread = threading.Thread(target=track_cb, args=(video_queue, video_fifo_path))
-        video_thread.start()
         ffmpeg_thread = threading.Thread(target=ffmpeg_cb, args=(out_queue, ffmpeg))
         ffmpeg_thread.start()
-        def _on_audio_frame(dev, frame):
-            audio_queue.put_nowait(frame)
-
-        def _on_video_frame(dev, frame):
-            video_queue.put_nowait(frame)
-
-        dev.set_aframe_cb(_on_audio_frame)
-        dev.set_vframe_cb(_on_video_frame)
-
         
         try:
-            while not self.wfile.closed:
+            while not self.wfile.closed and ffmpeg_thread.is_alive:
                 try:
-                    frame = out_queue.get(timeout=1)
+                    frame = out_queue.get(timeout=2)
                     self.wfile.write(frame)
                 except Empty:
-                    self.err(f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
+                    self.err(f'ffmpeg output timeout {dev.id}@{dev.host}:{dev.port}')
                     # self.send_response(502, f'Camera request timeout {dev.id}@{dev.host}:{dev.port}')
         except BrokenPipeError:
             self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]} __stream)')
             
         finally:
-            print('Killing ffmpeg')
             ffmpeg.kill()
-            print('Unsetting cbs')
-            dev.unset_vframe_cb(_on_video_frame)
-            dev.unset_aframe_cb(_on_audio_frame)
-            print('Putting nones')
-            audio_queue.put(None) # stop the audio thread
-            video_queue.put(None) # stop the video thread
-            print('join audio')
-            audio_thread.join()
-            print('join video')
-            video_thread.join()
-            print('join ffmpeg')
+            if audio: 
+                dev.unset_aframe_cb(_on_audio_frame)
+                audio_queue.put(None) # stop the audio thread
+                audio_thread.join()
+            if video:
+                dev.unset_vframe_cb(_on_video_frame)
+                video_queue.put(None) # stop the video thread
+                video_thread.join()
             ffmpeg_thread.join()
-            print('done closing')
+            self.dbg('Done closing')
         # try:
         #     self.send_header('Content-length', 0)
         #     self.send_header('Connection', 'close')
