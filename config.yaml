@@ -1,6 +1,6 @@
 ---
 name: A9 Camera fake server
-version: 2.2
+version: 2.3
 slug: a9-cam
 description: A9 Cam fake server
 url: https://github.com/dbuezas/a9-camera-ha-add-on

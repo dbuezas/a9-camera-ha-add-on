@@ -1,5 +1,7 @@
 # a9 add on
 
+![image](https://github.com/dbuezas/a9-camera-ha-add-on/assets/777196/bee48028-bcae-4ca3-81b1-ac0d83ec7547)
+
 ## Instructions
 
 Until I make give this the correct structure to be installed in a standard way, the steps are:

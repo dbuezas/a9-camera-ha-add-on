@@ -4,6 +4,26 @@
       body {
         background: white;
       }
+      table {
+        font-family: arial, sans-serif;
+        border-collapse: collapse;
+        width: 100%;
+      }
+
+      td,
+      th {
+        border: 1px solid #dddddd;
+        text-align: left;
+        padding: 8px;
+      }
+
+      tr:nth-child(even) {
+        background-color: #dddddd;
+      }
+      textarea.ffmpeg {
+        width: 100%;
+        height: 100px;
+      }
     </style>
   </head>
   <script>
@@ -11,47 +31,147 @@
       event.preventDefault(); // Stop the link from being followed
       fetch(event.target.href);
     }
-
+    function ffmpegChanged(event) {
+      let url = new URL("http://localhost/dev/0800c0035826/stream");
+      let params = {
+        mime: event.target.closest("tr").querySelector("input.ffmpeg.mime")
+          .value,
+        exec: event.target.closest("tr").querySelector("textarea.ffmpeg.exec")
+          .value,
+      };
+      url.search = new URLSearchParams(params);
+      event.target.closest("tr").querySelector("a.ffmpeg").href =
+        url.toString();
+    }
+    const defaultFfmpegCommandMime = "video/webm";
+    const defaultFfmpegCommand =
+      "ffmpeg -f alaw -ar 8000 -ac 1 -channel_layout mono -i {audio} -f mjpeg -framerate 10 -i {video} -c:v libvpx -b:v 512k -deadline realtime -cpu-used 5 -c:a libopus -b:a 16k -af adelay=0ms -framerate 10 -f webm pipe:1";
+    let lastHTML = "";
     const update = async () => {
       let list = [];
+      const localHref =
+        window.location.protocol + "//" + window.location.hostname;
       let html = "";
       try {
         list = await (await fetch("dev/list")).json();
-        html += "<p> CONNECTED </p>";
+        html += "<p> Server: connected </p>";
       } catch (e) {
-        html += "<p> DISCONNECTED </p>";
+        html += "<p> Server: unreachable </p>";
       }
 
       for (const { host, port, uid } of list) {
-        html += `<h3>${host}:${port} ${uid}</h3>`;
-        html += `
-            <ul>
-                <li><a target="_blank" href="dev/${uid}/browser-stream">Browser Stream</a></li>
-                <li><a target="_blank" href="dev/${uid}/go2rtc-stream">VLC/go2rtc Stream</a></li>
-                <li><a target="_blank" href="dev/${uid}/live">MJPEG Stream (good for Generic Camera)</a></li>
-                <li><a target="_blank" href="dev/${uid}/audio">Audio Stream</a></li>
-                <li><a target="_blank" href="dev/${uid}/snapshot">Snapshot</a></li>
-                <li><a href="dev/${uid}/cmd?code=299&reboot=1" onclick="call(event)">Reboot</a>
-                <li>IrLed:
-                    <a href="dev/${uid}/cmd?code=202&IrLed=0" onclick="call(event)">OFF</a>
-                    <a href="dev/${uid}/cmd?code=202&IrLed=1" onclick="call(event)">ON</a>
-                </li>
-                <li>Mirror lmage:
-                    <a href="dev/${uid}/cmd?code=216&mirrorFlip=0" onclick="call(event)">OFF</a>
-                    <a href="dev/${uid}/cmd?code=216&mirrorFlip=4" onclick="call(event)">ON</a>
-                </li>
-                <li>Power led:
-                    <a href="dev/${uid}/cmd?code=210&instLed=0" onclick="call(event)">OFF</a>
-                    <a href="dev/${uid}/cmd?code=210&instLed=1" onclick="call(event)">ON</a>
-                </li>
-                <li>LedEI:
-                    <a href="dev/${uid}/cmd?code=220&ledEI=0&lightGrade=0" onclick="call(event)">OFF</a>
-                    <a href="dev/${uid}/cmd?code=220&ledEI=1&lightGrade=1" onclick="call(event)">ON</a>
-                </li>
-            </ul>
+        const makeRow = (option, paths, fetchOnly = false) => `
+              <tr>
+                <td>${option}</td>
+                <td>${paths
+                  .map(
+                    ({ path, name }) =>
+                      `<a
+                        ${fetchOnly ? 'onclick="call(event)"' : ""}
+                        href="dev/${uid}${path}"
+                      >
+                        ${name}
+                      </a>`
+                  )
+                  .join(" / ")}
+                </td>
+                <td>${paths
+                  .map(
+                    ({ path, name }) =>
+                      `<a
+                        ${fetchOnly ? 'onclick="call(event)"' : ""}
+                        target="_blank"
+                        href="${localHref}/${uid}${path}"
+                      >
+                        ${name}
+                      </a>`
+                  )
+                  .join(" / ")}
+                </td>
+              </tr>
             `;
+        html += `
+                <table>
+                  <tr>
+                    <th>${host}:${port} ${uid}</th>
+                    <th>Ingress</th>
+                    <th>Local Network</th>
+                  </tr>
+                  ${makeRow("Browser Stream", [
+                    {
+                      path: "/browser-stream",
+                      name: "LINK",
+                    },
+                  ])}
+                  ${makeRow("VLC/go2rtc Stream", [
+                    { path: "/go2rtc-stream", name: "LINK" },
+                  ])}
+                  ${makeRow("MJPEG Stream (good for Generic Camera)", [
+                    { path: "/live", name: "LINK" },
+                  ])}
+                  ${makeRow("Audio Stream", [{ path: "/audio", name: "LINK" }])}
+                  ${makeRow("Snapshot", [{ path: "/snapshot", name: "LINK" }])}
+                  ${makeRow(
+                    "Reboot",
+                    [{ path: "/cmd?code=299&reboot=1", name: "LINK" }],
+                    true
+                  )}
+                  ${makeRow(
+                    "IrLed",
+                    [
+                      { path: "/cmd?code=202&IrLed=0", name: "OFF" },
+                      { path: "/cmd?code=202&IrLed=1", name: "ON" },
+                    ],
+                    true
+                  )}
+                  ${makeRow(
+                    "Mirror",
+                    [
+                      { path: "/cmd?code=216&mirrorFlip=0", name: "OFF" },
+                      { path: "/cmd?code=216&mirrorFlip=1", name: "ON" },
+                    ],
+                    true
+                  )}
+                  ${makeRow(
+                    "Power Led",
+                    [
+                      { path: "/cmd?code=210&instLed=0", name: "OFF" },
+                      { path: "/cmd?code=210&instLed=1", name: "ON" },
+                    ],
+                    true
+                  )}
+                <tr>
+                  <td>Custom ffmpeg command</td>
+                  <td>
+                    Mime-type: <input
+                      class="ffmpeg mime"
+                      onkeyup="ffmpegChanged(event)"
+                      onchange="ffmpegChanged(event)"
+                      onfocus="ffmpegChanged(event)"
+                      value="${defaultFfmpegCommandMime}"
+                    /> <br />
+                    <textarea
+                      class="ffmpeg exec"
+                      onkeyup="ffmpegChanged(event)"
+                      onchange="ffmpegChanged(event)"
+                      onfocus="ffmpegChanged(event)"
+                    >${defaultFfmpegCommand}</textarea>
+                  </td>
+                  <td>
+                    <a class="ffmpeg"
+                      target="_blank"
+                    >
+                      GO
+                    </a></td>
+                </tr>
+                </table>
+
+                `;
       }
-      document.getElementById("content").innerHTML = html;
+      if (lastHTML !== html) {
+        lastHTML = html;
+        document.getElementById("content").innerHTML = lastHTML;
+      }
     };
     update();
     let interval = setInterval(update, 500);
