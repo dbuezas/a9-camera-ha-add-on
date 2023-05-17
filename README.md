@@ -1,1 +1,1 @@
-Moved to [https://github.com/dbuezas/a9-camera-ha-add-on](https://github.com/dbuezas/a9-camera-ha-add-on)
+Moved to [https://github.com/dbuezas/ha-adds](https://github.com/dbuezas/ha-adds)
