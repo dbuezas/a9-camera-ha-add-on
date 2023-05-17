@@ -1,1 +1,1 @@
-Moved to [https://github.com/dbuezas/ha-adds](https://github.com/dbuezas/ha-adds)
+Moved to https://github.com/dbuezas/ha-addons/tree/main/a9-cam
