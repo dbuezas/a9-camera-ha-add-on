@@ -210,13 +210,13 @@ class v720_http(log, BaseHTTPRequestHandler):
         ffmpeg_thread.start()
         
         try:
-            while not self.wfile.closed and ffmpeg_thread.is_alive:
+            while not self.wfile.closed and ffmpeg_thread.is_alive():
                 try:
                     frame = out_queue.get(timeout=2)
                     self.wfile.write(frame)
                 except Empty:
-                    self.err(f'ffmpeg output timeout {dev.id}@{dev.host}:{dev.port}')
                     self.wfile.write(b'') #throw if connection closed
+                    self.err(f'ffmpeg output timeout {dev.id}@{dev.host}:{dev.port}')
         except BrokenPipeError:
             self.err(f'Connection closed by peer @ {dev.id} ({self.client_address[0]} __stream)')
             

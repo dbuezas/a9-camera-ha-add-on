@@ -22,7 +22,6 @@
       }
       textarea.ffmpeg {
         width: 100%;
-        height: 100px;
       }
     </style>
   </head>
@@ -31,26 +30,83 @@
       event.preventDefault(); // Stop the link from being followed
       fetch(event.target.href);
     }
-    function ffmpegChanged(event) {
-      let url = new URL("http://localhost/dev/0800c0035826/stream");
+    const localHref =
+      window.location.protocol + "//" + window.location.hostname;
+
+    function ffmpegChanged(event, uid) {
+      const aEl = event.target.closest("tr").querySelector("a.ffmpeg");
+      const mimeEl = event.target
+        .closest("tr")
+        .querySelector("input.ffmpeg.mime");
+      const execEl = event.target
+        .closest("tr")
+        .querySelector("textarea.ffmpeg.exec");
+      let url = new URL(`${localHref}/dev/${uid}/stream`);
       let params = {
-        mime: event.target.closest("tr").querySelector("input.ffmpeg.mime")
-          .value,
-        exec: event.target.closest("tr").querySelector("textarea.ffmpeg.exec")
-          .value,
+        mime: mimeEl.value,
+        exec: execEl.value,
       };
       url.search = new URLSearchParams(params);
-      event.target.closest("tr").querySelector("a.ffmpeg").href =
-        url.toString();
+      aEl.href = url.toString();
     }
+
     const defaultFfmpegCommandMime = "video/webm";
     const defaultFfmpegCommand =
       "ffmpeg -f alaw -ar 8000 -ac 1 -channel_layout mono -i {audio} -f mjpeg -framerate 10 -i {video} -c:v libvpx -b:v 512k -deadline realtime -cpu-used 5 -c:a libopus -b:a 16k -af adelay=0ms -framerate 10 -f webm pipe:1";
     let lastHTML = "";
+    const makeRow = ({ uid, option, links, fetch }) => `
+      <tr>
+        <td>${option}</td>
+        <td>${Object.entries(links)
+          .map(
+            ([name, path]) =>
+              `<a
+                ${fetch ? 'onclick="call(event)"' : ""}
+                href="dev/${uid}${path}"
+              >
+                ${name}
+              </a>`
+          )
+          .join(" / ")}
+        </td>
+        <td>${Object.entries(links)
+          .map(
+            ([name, path]) =>
+              `<a
+                ${fetch ? 'onclick="call(event)"' : ""}
+                target="_blank"
+                href="${localHref}/dev/${uid}${path}"
+              >
+                ${name}
+              </a>`
+          )
+          .join(" / ")}
+        </td>
+      </tr>
+    `;
+    const pages = {
+      "Browser Stream": { LINK: "/browser-stream" },
+      "VLC/go2rtc Stream": { LINK: "/go2rtc-stream" },
+      "MJPEG Stream (good for Generic Camera)": { LINK: "/live" },
+      "Audio Stream": { LINK: "/audio" },
+      Snapshot: { LINK: "/snapshot" },
+    };
+
+    const cmds = {
+      Reboot: { LINK: "/cmd?code=299&reboot=1" },
+      IrLed: { OFF: "/cmd?code=202&IrLed=0", ON: "/cmd?code=202&IrLed=1" },
+      Mirror: {
+        OFF: "/cmd?code=216&mirrorFlip=0",
+        ON: "/cmd?code=216&mirrorFlip=1",
+      },
+      "Power Led": {
+        OFF: "/cmd?code=210&instLed=0",
+        ON: "/cmd?code=210&instLed=1",
+      },
+    };
+
     const update = async () => {
       let list = [];
-      const localHref =
-        window.location.protocol + "//" + window.location.hostname;
       let html = "";
       try {
         list = await (await fetch("dev/list")).json();
@@ -60,113 +116,46 @@
       }
 
       for (const { host, port, uid } of list) {
-        const makeRow = (option, paths, fetchOnly = false) => `
-              <tr>
-                <td>${option}</td>
-                <td>${paths
-                  .map(
-                    ({ path, name }) =>
-                      `<a
-                        ${fetchOnly ? 'onclick="call(event)"' : ""}
-                        href="dev/${uid}${path}"
-                      >
-                        ${name}
-                      </a>`
-                  )
-                  .join(" / ")}
-                </td>
-                <td>${paths
-                  .map(
-                    ({ path, name }) =>
-                      `<a
-                        ${fetchOnly ? 'onclick="call(event)"' : ""}
-                        target="_blank"
-                        href="${localHref}/dev/${uid}${path}"
-                      >
-                        ${name}
-                      </a>`
-                  )
-                  .join(" / ")}
-                </td>
-              </tr>
-            `;
         html += `
-                <table>
-                  <tr>
-                    <th>${host}:${port} ${uid}</th>
-                    <th>Ingress</th>
-                    <th>Local Network</th>
-                  </tr>
-                  ${makeRow("Browser Stream", [
-                    {
-                      path: "/browser-stream",
-                      name: "LINK",
-                    },
-                  ])}
-                  ${makeRow("VLC/go2rtc Stream", [
-                    { path: "/go2rtc-stream", name: "LINK" },
-                  ])}
-                  ${makeRow("MJPEG Stream (good for Generic Camera)", [
-                    { path: "/live", name: "LINK" },
-                  ])}
-                  ${makeRow("Audio Stream", [{ path: "/audio", name: "LINK" }])}
-                  ${makeRow("Snapshot", [{ path: "/snapshot", name: "LINK" }])}
-                  ${makeRow(
-                    "Reboot",
-                    [{ path: "/cmd?code=299&reboot=1", name: "LINK" }],
-                    true
-                  )}
-                  ${makeRow(
-                    "IrLed",
-                    [
-                      { path: "/cmd?code=202&IrLed=0", name: "OFF" },
-                      { path: "/cmd?code=202&IrLed=1", name: "ON" },
-                    ],
-                    true
-                  )}
-                  ${makeRow(
-                    "Mirror",
-                    [
-                      { path: "/cmd?code=216&mirrorFlip=0", name: "OFF" },
-                      { path: "/cmd?code=216&mirrorFlip=1", name: "ON" },
-                    ],
-                    true
-                  )}
-                  ${makeRow(
-                    "Power Led",
-                    [
-                      { path: "/cmd?code=210&instLed=0", name: "OFF" },
-                      { path: "/cmd?code=210&instLed=1", name: "ON" },
-                    ],
-                    true
-                  )}
-                <tr>
-                  <td>Custom ffmpeg command</td>
-                  <td>
-                    Mime-type: <input
-                      class="ffmpeg mime"
-                      onkeyup="ffmpegChanged(event)"
-                      onchange="ffmpegChanged(event)"
-                      onfocus="ffmpegChanged(event)"
-                      value="${defaultFfmpegCommandMime}"
-                    /> <br />
-                    <textarea
-                      class="ffmpeg exec"
-                      onkeyup="ffmpegChanged(event)"
-                      onchange="ffmpegChanged(event)"
-                      onfocus="ffmpegChanged(event)"
-                    >${defaultFfmpegCommand}</textarea>
-                  </td>
-                  <td>
-                    <a class="ffmpeg"
-                      target="_blank"
-                    >
-                      GO
-                    </a></td>
-                </tr>
-                </table>
-
-                `;
+        <table>
+          <tr>
+            <th>${host}:${port} ${uid}</th>
+            <th>Ingress</th>
+            <th>Local Network</th>
+          </tr>
+          ${Object.entries(pages)
+            .map(([option, links]) =>
+              makeRow({ uid, option, links, fetch: false })
+            )
+            .join("")}
+          ${Object.entries(cmds)
+            .map(([option, links]) =>
+              makeRow({ uid, option, links, fetch: true })
+            )
+            .join("")}
+        <tr>
+          <td colspan="3" >
+            <p>Custom ffmpeg command</p>
+            <p>Mime-type: <input
+              class="ffmpeg mime"
+              onkeyup="ffmpegChanged(event, '${uid}')"
+              onchange="ffmpegChanged(event, '${uid}')"
+              onfocus="ffmpegChanged(event, '${uid}')"
+              value="${defaultFfmpegCommandMime}"
+            /> </p>
+            <p><textarea
+              class="ffmpeg exec"
+              onkeyup="ffmpegChanged(event, '${uid}')"
+              onchange="ffmpegChanged(event, '${uid}')"
+              onfocus="ffmpegChanged(event, '${uid}')"
+            >${defaultFfmpegCommand}</textarea> </p>
+            <a class="ffmpeg"
+              target="_blank"
+            >
+              GO
+            </a></td>
+        </tr>
+        </table>`;
       }
       if (lastHTML !== html) {
         lastHTML = html;
