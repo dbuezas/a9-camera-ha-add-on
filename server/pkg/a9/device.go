@@ -65,6 +65,7 @@ type session struct {
 	probed    bool // answered the first probe
 	ready     bool // sent the command mode sequence
 	opened    bool // sent "open audio and video"
+	switched  bool // sent "video only" after the first frame
 	natAt     time.Time
 	lastFrame time.Time
 	pids      []uint32 // received since the last ack
@@ -238,6 +239,7 @@ func (d *Device) requestNAT(s *session) {
 	s.probed = false
 	s.ready = false
 	s.opened = false
+	s.switched = false
 	s.acking = false
 	s.pids = s.pids[:0]
 	s.natAt = time.Now()
@@ -348,7 +350,9 @@ func (d *Device) handleTCPMessage(pkt *Packet) {
 			d.mu.Unlock()
 			d.log.Debug().Msgf("[a9] base info %s", msg.Content)
 			if open {
-				d.forward(Obj{{"code", d.openCode()}})
+				// The camera does not start a stream in "video only" mode, so always start with
+				// audio and video, and switch after the first frame if audio is off.
+				d.forward(Obj{{"code", FwdOpenAV}})
 			}
 			d.notify()
 		case FwdOpenAV, FwdOpenV:
@@ -407,8 +411,15 @@ func (d *Device) handleUDP(addr *net.UDPAddr, pkt *Packet) {
 		s.lastFrame = time.Now()
 		s.acking = true
 		d.lastFrame, d.lastFrameAt = frame, s.lastFrame
+		videoOnly := !s.switched && !d.srv.settings.get(d.UID).Audio
+		if videoOnly {
+			s.switched = true
+		}
 		subs := slices.Clone(d.subs)
 		d.mu.Unlock()
+		if videoOnly {
+			d.forward(Obj{{"code", FwdOpenV}})
+		}
 		for _, sub := range subs {
 			if sub.OnVideo != nil {
 				sub.OnVideo(frame)

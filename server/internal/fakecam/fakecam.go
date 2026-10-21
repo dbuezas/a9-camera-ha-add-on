@@ -146,6 +146,14 @@ func (c *Cam) readTCP() {
 				c.mu.Unlock()
 				c.sendTCP(map[string]any{"code": 301, "target": msg["target"], "content": info})
 			case a9.FwdOpenAV, a9.FwdOpenV:
+				c.mu.Lock()
+				running := c.streaming != nil
+				c.mu.Unlock()
+				if code(content) == a9.FwdOpenV && !running {
+					// like real cameras: "video only" works on a running stream, but does not start one
+					c.sendTCP(msg)
+					continue
+				}
 				c.Opens.Add(1)
 				c.mu.Lock()
 				c.audio = code(content) == a9.FwdOpenAV

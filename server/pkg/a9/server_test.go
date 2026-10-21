@@ -266,8 +266,13 @@ func TestAudioOff(t *testing.T) {
 			t.Fatal("no video")
 		}
 	}
+	// the stream starts with audio (the camera wants that), then switches to video only:
+	// the camera stops sending audio and nothing reaches the subscriber
 	require.Empty(t, audio)
-	require.Zero(t, cam.AudioSent.Load(), "the camera was asked for video only")
+	sent := cam.AudioSent.Load()
+	time.Sleep(500 * time.Millisecond)
+	require.Equal(t, sent, cam.AudioSent.Load(), "the camera still sends audio")
+	require.LessOrEqual(t, sent, int32(2))
 
 	// turning audio on while streaming reopens the stream with audio
 	require.NoError(t, dev.SetAudio(true))

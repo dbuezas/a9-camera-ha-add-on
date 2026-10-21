@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.2
+
+- Fix: with Audio off, the camera sent no video. Cameras do not start a stream in "video only" mode,
+  so the stream now starts with audio and switches to video only after the first frame.
+
 ## 3.1.1
 
 - Integration: an existing setup follows the add-on to its new port (8557) instead of showing
