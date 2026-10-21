@@ -34,15 +34,31 @@ var (
 )
 
 func main() {
-	httpAddr := flag.String("http", ":80", "HTTP address (the camera calls port 80)")
+	httpAddr := flag.String("http", ":80", "camera cloud API address, the cameras call port 80 (empty: off)")
+	uiAddr := flag.String("ui", ":8557", "web UI and integration API address")
+	settingsPath := flag.String("settings", "", "JSON file for per camera settings (default: /data/settings.json in the add-on)")
 	camPort := flag.Int("port", 6123, "camera TCP and UDP port")
 	rtspAddr := flag.String("rtsp", ":8556", "RTSP address, empty to disable")
 	host := flag.String("host", "", "IP announced to the cameras (default: the IP they connected to)")
 	level := flag.String("log", "", "log level: trace, debug, info, warn, error (default: add-on option or info)")
 	flag.Parse()
 
+	opts, isAddon := readAddonOptions()
+	set := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
 	if *level == "" {
-		*level = addonLogLevel()
+		*level = opts.LogLevel
+	}
+	if isAddon {
+		if !set["http"] && opts.CameraHTTPPort != nil {
+			*httpAddr = ""
+			if *opts.CameraHTTPPort > 0 {
+				*httpAddr = ":" + strconv.Itoa(*opts.CameraHTTPPort)
+			}
+		}
+		if *settingsPath == "" {
+			*settingsPath = "/data/settings.json"
+		}
 	}
 	lvl, err := zerolog.ParseLevel(*level)
 	if err != nil || *level == "" {
@@ -57,6 +73,8 @@ func main() {
 	server.TCPPort = *camPort
 	server.Host = *host
 	server.OnUpdate = bus.publish
+	server.SettingsPath = *settingsPath
+	server.LoadSettings()
 
 	streams = hub.New(func(name string) (core.Producer, error) {
 		return server.Dial("a9:" + name)
@@ -85,13 +103,24 @@ func main() {
 		go serveRTSP(ln)
 	}
 
-	ln, err := net.Listen("tcp", *httpAddr)
-	if err != nil {
-		log.Fatal().Err(err).Msg("[main] http")
+	mux := routes()
+
+	// Port 80 serves everything too, so old links keep working
+	if *httpAddr != "" {
+		ln, err := net.Listen("tcp", *httpAddr)
+		if err != nil {
+			log.Fatal().Err(err).Msg("[main] camera http (port 80 used by another add-on? see the camera_http_port option)")
+		}
+		go func() { log.Fatal().Err(http.Serve(ln, mux)).Msg("[main] camera http") }()
 	}
-	log.Info().Str("http", *httpAddr).Int("camera", *camPort).Str("rtsp", *rtspAddr).Msg("[main] listen")
+
+	ln, err := net.Listen("tcp", *uiAddr)
+	if err != nil {
+		log.Fatal().Err(err).Msg("[main] ui")
+	}
+	log.Info().Str("camera_http", *httpAddr).Str("ui", *uiAddr).Int("camera", *camPort).Str("rtsp", *rtspAddr).Msg("[main] listen")
 	go discover(ln.Addr().(*net.TCPAddr).Port)
-	log.Fatal().Err(http.Serve(ln, routes())).Msg("[main] http")
+	log.Fatal().Err(http.Serve(ln, mux)).Msg("[main] ui")
 }
 
 func routes() *http.ServeMux {
@@ -105,6 +134,7 @@ func routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/events", apiEvents)
 	mux.HandleFunc("POST /api/devices/{uid}/command", apiCommandJSON)
 	mux.HandleFunc("POST /api/devices/{uid}/refresh", apiRefresh)
+	mux.HandleFunc("POST /api/devices/{uid}/settings", apiSettings)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, web, "web/index.html")
 	})

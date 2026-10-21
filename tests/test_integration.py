@@ -68,6 +68,11 @@ async def test_entities_and_switch(hass: HomeAssistant, addon: int) -> None:
     )
     await _until(hass, lambda: hass.states.get(quality).state == "high")
 
+    audio = _entity(hass, "switch", "audio")
+    assert hass.states.get(audio).state == STATE_ON
+    await hass.services.async_call("switch", "turn_off", {"entity_id": audio}, blocking=True)
+    await _until(hass, lambda: hass.states.get(audio).state == STATE_OFF)
+
     assert hass.states.get(_entity(hass, "binary_sensor", "streaming")).state == STATE_OFF
     assert hass.states.get(_entity(hass, "button", "reboot")) is not None
 

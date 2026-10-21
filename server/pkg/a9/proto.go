@@ -49,6 +49,7 @@ const (
 // Forwarded command codes (inside CodeForward "content")
 const (
 	FwdCloseAV        = 0
+	FwdOpenV          = 2 // video only
 	FwdOpenAV         = 3
 	FwdBaseInfo       = 4
 	FwdRetransmission = 298

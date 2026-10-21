@@ -40,7 +40,10 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: A9ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     setup_platform_entities(
-        hass, entry, async_add_entities, lambda hub, uid: [A9Switch(hub, uid, d) for d in SWITCHES]
+        hass,
+        entry,
+        async_add_entities,
+        lambda hub, uid: [*(A9Switch(hub, uid, d) for d in SWITCHES), A9Audio(hub, uid)],
     )
 
 
@@ -65,3 +68,23 @@ class A9Switch(A9Entity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         d = self.entity_description
         await self.send({"code": d.code, d.field: d.off})
+
+
+class A9Audio(A9Entity, SwitchEntity):
+    """Kept by the add-on: off asks the camera for video only."""
+
+    _attr_translation_key = "audio"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, hub: A9Hub, uid: str) -> None:
+        super().__init__(hub, uid, "audio")
+
+    @property
+    def is_on(self) -> bool | None:
+        return self.state_data.get("audio")
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self.hub.client.set_audio(self.uid, True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self.hub.client.set_audio(self.uid, False)

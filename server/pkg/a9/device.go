@@ -150,6 +150,35 @@ func (d *Device) notify() {
 	}
 }
 
+// Settings returns the server side settings of this camera
+func (d *Device) Settings() Settings {
+	return d.srv.settings.get(d.UID)
+}
+
+// SetAudio turns the camera audio on or off, also while streaming
+func (d *Device) SetAudio(on bool) error {
+	st := d.Settings()
+	st.Audio = on
+	if err := d.srv.settings.set(d.UID, st); err != nil {
+		return err
+	}
+	d.mu.Lock()
+	reopen := d.session != nil && d.session.opened
+	d.mu.Unlock()
+	if reopen {
+		d.forward(Obj{{"code", d.openCode()}})
+	}
+	d.notify()
+	return nil
+}
+
+func (d *Device) openCode() int {
+	if d.Settings().Audio {
+		return FwdOpenAV
+	}
+	return FwdOpenV
+}
+
 // Streaming tells if the camera is asked to send media
 func (d *Device) Streaming() bool {
 	d.mu.Lock()
@@ -319,10 +348,10 @@ func (d *Device) handleTCPMessage(pkt *Packet) {
 			d.mu.Unlock()
 			d.log.Debug().Msgf("[a9] base info %s", msg.Content)
 			if open {
-				d.forward(Obj{{"code", FwdOpenAV}})
+				d.forward(Obj{{"code", d.openCode()}})
 			}
 			d.notify()
-		case FwdOpenAV:
+		case FwdOpenAV, FwdOpenV:
 			d.log.Debug().Msg("[a9] camera opened the stream")
 		case FwdCloseAV:
 			d.log.Debug().Msg("[a9] camera closed the stream")
@@ -393,6 +422,9 @@ func (d *Device) handleUDP(addr *net.UDPAddr, pkt *Packet) {
 		}
 		s.packets++
 		s.pids = append(s.pids, pkt.PkgID)
+		if !d.srv.settings.get(d.UID).Audio {
+			break // late packets after turning audio off
+		}
 		audio := slices.Clone(pkt.Payload)
 		subs := slices.Clone(d.subs)
 		d.mu.Unlock()

@@ -24,6 +24,11 @@ type Server struct {
 	// Empty means: the local IP of the HTTP connection the camera used.
 	Host string
 
+	// SettingsPath is a JSON file for per camera settings. Empty: not saved.
+	SettingsPath string
+
+	settings settingsStore
+
 	// OnUpdate is called when a camera connects, disconnects, reports its state,
 	// or starts or stops streaming. It must not block.
 	OnUpdate func(*Device)
@@ -35,12 +40,14 @@ type Server struct {
 }
 
 func NewServer() *Server {
-	return &Server{
+	s := &Server{
 		Log:     zerolog.Nop(),
 		TCPPort: 6123,
 		devices: map[string]*Device{},
 		udpDevs: map[string]*Device{},
 	}
+	s.settings.load()
+	return s
 }
 
 // Get returns a connected device or nil
@@ -60,6 +67,12 @@ func (s *Server) Devices() []*Device {
 	s.mu.Unlock()
 	slices.SortFunc(devs, func(a, b *Device) int { return strings.Compare(a.UID, b.UID) })
 	return devs
+}
+
+// LoadSettings reads SettingsPath. Call it before serving.
+func (s *Server) LoadSettings() {
+	s.settings.path = s.SettingsPath
+	s.settings.load()
 }
 
 // ServeTCP accepts control connections from cameras

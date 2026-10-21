@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -240,4 +241,67 @@ func TestAPI(t *testing.T) {
 	require.NoError(t, err)
 	res3.Body.Close()
 	require.Equal(t, 404, res3.StatusCode)
+}
+
+func TestAudioOff(t *testing.T) {
+	srv, addr := startServer(t)
+	srv.SettingsPath = t.TempDir() + "/settings.json"
+	srv.LoadSettings()
+
+	cam, err := fakecam.Dial(addr, "0800c0035826")
+	require.NoError(t, err)
+	defer cam.Close()
+	dev := waitDevice(t, srv, "0800c0035826")
+	require.True(t, dev.Settings().Audio)
+
+	require.NoError(t, dev.SetAudio(false))
+	video := make(chan []byte, 100)
+	audio := make(chan []byte, 100)
+	sub := &a9.Subscriber{OnVideo: func(b []byte) { video <- b }, OnAudio: func(b []byte) { audio <- b }}
+	dev.Subscribe(sub)
+	for range 5 {
+		select {
+		case <-video:
+		case <-time.After(3 * time.Second):
+			t.Fatal("no video")
+		}
+	}
+	require.Empty(t, audio)
+	require.Zero(t, cam.AudioSent.Load(), "the camera was asked for video only")
+
+	// turning audio on while streaming reopens the stream with audio
+	require.NoError(t, dev.SetAudio(true))
+	select {
+	case <-audio:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no audio after turning it on")
+	}
+	dev.Unsubscribe(sub)
+
+	// the setting is saved and loaded again by a new server
+	require.NoError(t, dev.SetAudio(false))
+	b, err := os.ReadFile(srv.SettingsPath)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"0800c0035826":{"audio":false}}`, string(b))
+
+	srv2, addr2 := startServer(t)
+	srv2.SettingsPath = srv.SettingsPath
+	srv2.LoadSettings()
+	cam2, err := fakecam.Dial(addr2, "0800c0035826")
+	require.NoError(t, err)
+	defer cam2.Close()
+	require.False(t, waitDevice(t, srv2, "0800c0035826").Settings().Audio)
+}
+
+func TestAPIGetDevInfo(t *testing.T) {
+	srv := a9.NewServer()
+	ts := httptest.NewServer(http.HandlerFunc(srv.HandleAPI))
+	defer ts.Close()
+	res, err := http.Post(ts.URL+"/app/api/ApiSysDevices/getDevInfo?devicesCode=5c0015012C00&random=XKVJWJ&token=7b934e6b39", "", nil)
+	require.NoError(t, err)
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	require.Equal(t, 200, res.StatusCode)
+	require.Contains(t, string(b), `"uid":"5c0015012C00"`)
+	require.Contains(t, string(b), `"tcpPort":6123`)
 }

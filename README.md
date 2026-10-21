@@ -42,7 +42,8 @@ For each camera, a device with:
 | Entity | What it does |
 | --- | --- |
 | Camera | Live MJPEG video and snapshots |
-| Infrared / Status LED / ... switches | Camera settings, applied and confirmed by the camera |
+| Infrared / Status LED / Flip image switches | Camera settings, applied and confirmed by the camera |
+| Audio switch | Off: the camera sends video only, its audio never leaves it |
 | Image orientation | Flip and mirror the image |
 | Battery | Battery level |
 | Streaming | On while somebody watches |
@@ -68,8 +69,8 @@ without any conversion.
 | What | URL |
 | --- | --- |
 | RTSP, MJPEG video + PCMA audio | `rtsp://HA_IP:8556/CAMERA_ID` |
-| MJPEG | `http://HA_IP/dev/CAMERA_ID/live` |
-| JPEG snapshot | `http://HA_IP/dev/CAMERA_ID/snapshot` |
+| MJPEG | `http://HA_IP:8557/dev/CAMERA_ID/live` |
+| JPEG snapshot | `http://HA_IP:8557/dev/CAMERA_ID/snapshot` |
 
 More in [the add-on docs](a9-cam/DOCS.md).
 

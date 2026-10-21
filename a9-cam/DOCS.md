@@ -24,9 +24,9 @@ Replace `CAMERA_ID` with the ID shown in the web UI (for example `0800c0035826`)
 | What | URL |
 | --- | --- |
 | RTSP, MJPEG video + PCMA audio | `rtsp://HA_IP:8556/CAMERA_ID` |
-| MJPEG over HTTP | `http://HA_IP/dev/CAMERA_ID/live` |
-| JPEG snapshot | `http://HA_IP/dev/CAMERA_ID/snapshot` (add `?max_age=60` to reuse a recent frame) |
-| Camera list (JSON) | `http://HA_IP/dev/list` |
+| MJPEG over HTTP | `http://HA_IP:8557/dev/CAMERA_ID/live` |
+| JPEG snapshot | `http://HA_IP:8557/dev/CAMERA_ID/snapshot` (add `?max_age=60` to reuse a recent frame) |
+| Camera list (JSON) | `http://HA_IP:8557/dev/list` |
 
 The camera only sends video while someone watches. All viewers of one camera share one stream.
 
@@ -63,10 +63,33 @@ Version 3 is a rewrite in Go. It does not use Python or FFmpeg anymore.
 - `/dev/CAMERA_ID/go2rtc-stream`, `/stream`, `/browser-stream` and `/audio` are gone (they needed FFmpeg).
   Use the RTSP URL instead, see the go2rtc example above.
 
+## Options
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `log_level` | `info` | `debug` shows every camera message and stream statistics |
+| `camera_http_port` | `80` | Port for the cameras' cloud calls. They always call port 80, so only change it if another add-on uses port 80 and forwards `/app/api/` to this add-on (port 8557). `0` turns it off. |
+
+## Audio
+
+Each camera has an **Audio** switch in the integration. Off asks the camera for video only, so its
+microphone audio never leaves the camera. The setting is kept when the add-on restarts.
+
 ## Ports
 
-The add-on uses the host network: port 80 (the cameras call it, it cannot change), 6123 TCP and UDP
-(camera connection) and 8556 (RTSP).
+The add-on uses the host network:
+
+| Port | What |
+| --- | --- |
+| 80 | Cloud calls of the cameras (see `camera_http_port`) |
+| 6123 TCP + UDP | Camera connection |
+| 8556 | RTSP |
+| 8557 | Web UI, MJPEG, snapshots, integration API |
+
+## Reconnecting
+
+After the add-on restarts, cameras come back by themselves. Some firmware versions wait about 8 minutes
+before they retry. Restarting the camera brings it back at once.
 
 ## Credits
 

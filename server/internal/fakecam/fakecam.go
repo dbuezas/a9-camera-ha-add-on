@@ -30,11 +30,13 @@ type Cam struct {
 	mu        sync.Mutex
 	udp       *net.UDPConn
 	streaming chan struct{}
+	audio     bool
 	pid       uint32
 
 	Acks      atomic.Int32 // ack packets received
 	AckedPIDs atomic.Int32
 	Opens     atomic.Int32 // "open stream" commands
+	AudioSent atomic.Int32
 	Closes    atomic.Int32
 	NATs      atomic.Int32
 	Commands  chan map[string]any // forwarded commands other than the protocol ones
@@ -143,8 +145,11 @@ func (c *Cam) readTCP() {
 				}
 				c.mu.Unlock()
 				c.sendTCP(map[string]any{"code": 301, "target": msg["target"], "content": info})
-			case a9.FwdOpenAV:
+			case a9.FwdOpenAV, a9.FwdOpenV:
 				c.Opens.Add(1)
+				c.mu.Lock()
+				c.audio = code(content) == a9.FwdOpenAV
+				c.mu.Unlock()
 				c.sendTCP(msg)
 				c.startStreaming()
 			case a9.FwdCloseAV:
@@ -235,7 +240,13 @@ func (c *Cam) startStreaming() {
 		defer ticker.Stop()
 		for i := 0; ; i++ {
 			c.sendFrame(c.Frames[i%len(c.Frames)])
-			c.sendUDP(&a9.Packet{Cmd: a9.CmdG711, MsgFlag: a9.FlagSingle, PkgID: c.nextPID(), Payload: make([]byte, 800)})
+			c.mu.Lock()
+			audio := c.audio
+			c.mu.Unlock()
+			if audio {
+				c.AudioSent.Add(1)
+				c.sendUDP(&a9.Packet{Cmd: a9.CmdG711, MsgFlag: a9.FlagSingle, PkgID: c.nextPID(), Payload: make([]byte, 800)})
+			}
 			select {
 			case <-stop:
 				return

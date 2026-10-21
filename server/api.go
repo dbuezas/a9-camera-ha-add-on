@@ -24,6 +24,7 @@ type deviceJSON struct {
 	Port        int            `json:"port"`
 	ConnectedAt time.Time      `json:"connected_at"`
 	Info        map[string]any `json:"info"`
+	Audio       bool           `json:"audio"`
 }
 
 func toJSON(d *a9.Device) deviceJSON {
@@ -36,6 +37,7 @@ func toJSON(d *a9.Device) deviceJSON {
 	return deviceJSON{
 		UID: d.UID, Online: d.Online(), Streaming: d.Streaming(),
 		Host: host, Port: p, ConnectedAt: d.ConnectedAt, Info: info,
+		Audio: d.Settings().Audio,
 	}
 }
 
@@ -204,15 +206,39 @@ func discover(httpPort int) {
 	log.Debug().Int("status", res.StatusCode).Msg("[main] discovery")
 }
 
-// addonLogLevel reads the log level from the add-on options, if they exist
-func addonLogLevel() string {
+type addonOptions struct {
+	LogLevel       string `json:"log_level"`
+	CameraHTTPPort *int   `json:"camera_http_port"`
+}
+
+// readAddonOptions reads the add-on options. ok is false outside of the add-on.
+func readAddonOptions() (opts addonOptions, ok bool) {
 	b, err := os.ReadFile("/data/options.json")
 	if err != nil {
-		return ""
-	}
-	var opts struct {
-		LogLevel string `json:"log_level"`
+		return opts, false
 	}
 	_ = json.Unmarshal(b, &opts)
-	return opts.LogLevel
+	return opts, true
+}
+
+// apiSettings changes server side settings of a camera, ex: {"audio": false}
+func apiSettings(w http.ResponseWriter, r *http.Request) {
+	dev := server.Get(r.PathValue("uid"))
+	if dev == nil {
+		http.Error(w, a9.ErrNotConnected.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	var body struct {
+		Audio *bool `json:"audio"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Audio == nil {
+		http.Error(w, `body must be {"audio": true|false}`, http.StatusBadRequest)
+		return
+	}
+	if err := dev.SetAudio(*body.Audio); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Info().Str("uid", dev.UID).Bool("audio", *body.Audio).Msg("[api] settings")
+	w.WriteHeader(http.StatusNoContent)
 }

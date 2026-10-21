@@ -76,8 +76,8 @@
         </div>`;
       el.querySelector("b").textContent = cam.uid;
       el.querySelector(".rtsp").textContent = `rtsp://${host}:8556/${cam.uid}`;
-      el.querySelector(".mjpeg").textContent = `http://${host}/dev/${cam.uid}/live`;
-      el.querySelector(".snap").textContent = `http://${host}/dev/${cam.uid}/snapshot`;
+      el.querySelector(".mjpeg").textContent = `http://${host}:8557/dev/${cam.uid}/live`;
+      el.querySelector(".snap").textContent = `http://${host}:8557/dev/${cam.uid}/snapshot`;
       const img = el.querySelector("img");
       const live = el.querySelector(".live");
       live.onclick = () => {

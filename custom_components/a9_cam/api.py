@@ -54,6 +54,18 @@ class A9Client:
         except (aiohttp.ClientError, TimeoutError) as err:
             raise A9Error(str(err)) from err
 
+    async def set_audio(self, uid: str, on: bool) -> None:
+        """Audio off asks the camera for video only, so no audio leaves it."""
+        try:
+            async with self._session.post(
+                f"{self.base}/api/devices/{uid}/settings",
+                json={"audio": on},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as res:
+                res.raise_for_status()
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise A9Error(str(err)) from err
+
     async def snapshot(self, uid: str, max_age: int | None = None) -> bytes:
         """A JPEG frame. With max_age, a frame that recent is reused without waking the camera."""
         params = {"max_age": str(max_age)} if max_age is not None else None

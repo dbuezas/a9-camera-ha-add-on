@@ -25,8 +25,9 @@ func (s *Server) HandleAPI(w http.ResponseWriter, r *http.Request) {
 
 	case "ApiSysDevicesBatch/confirm", "ApiSysDevices/a9bindingAppDevice":
 
-	case "ApiServer/getA9ConfCheck":
-		// tells the camera where its TCP server is
+	case "ApiServer/getA9ConfCheck", "ApiSysDevices/getDevInfo":
+		// tells the camera where its TCP server is.
+		// getDevInfo comes from newer firmware (issue #16), its answer format is a guess.
 		uid := r.URL.Query().Get("devicesCode")
 		data = Obj{
 			{"tcpPort", s.TCPPort},
@@ -39,7 +40,7 @@ func (s *Server) HandleAPI(w http.ResponseWriter, r *http.Request) {
 			{"pwd", "deadbeef"},
 			{"version", nil},
 		}
-		s.Log.Debug().Str("uid", uid).Str("addr", r.RemoteAddr).Msg("[a9] bootstrap")
+		s.Log.Info().Str("uid", uid).Str("addr", r.RemoteAddr).Str("path", r.URL.Path).Msg("[a9] bootstrap")
 
 	default:
 		s.Log.Warn().Str("path", r.URL.Path).Msg("[a9] unknown api request")

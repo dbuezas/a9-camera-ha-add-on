@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.0
+
+- New: Audio switch per camera. Off asks the camera for video only, so no audio leaves it (#13).
+- New: web UI, MJPEG, snapshots and the integration API also on port 8557. Option `camera_http_port`
+  (default 80, 0 = off) for systems where another add-on uses port 80 (#1).
+- Experimental: answer `getDevInfo` from newer camera firmware (#16).
+
 ## 3.0.0
 
 - Rewrite in Go. No Python and no FFmpeg in the image anymore.

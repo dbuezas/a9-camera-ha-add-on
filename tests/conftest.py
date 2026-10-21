@@ -46,7 +46,7 @@ def addon(binaries: Path, socket_enabled) -> Iterator[int]:
     """Start the server and one fake camera. Yields the HTTP port."""
     http_port, cam_port = _free_port(), _free_port()
     server = subprocess.Popen(
-        [binaries / "a9cam", "-http", f"127.0.0.1:{http_port}", "-port", str(cam_port), "-rtsp", ""],
+        [binaries / "a9cam", "-http", "", "-ui", f"127.0.0.1:{http_port}", "-port", str(cam_port), "-rtsp", ""],
     )
     deadline = time.time() + 10
     while True:
