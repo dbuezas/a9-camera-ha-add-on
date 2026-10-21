@@ -1,0 +1,3 @@
+server/pkg/a9/testdata/*.bin
+__pycache__/
+.DS_Store

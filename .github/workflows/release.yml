@@ -1,0 +1,83 @@
+name: Release
+
+# Push a tag like v3.0.0. The tag must match a9-cam/config.yaml and the integration manifest.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          grep -q "^version: ${version}$" a9-cam/config.yaml || { echo "a9-cam/config.yaml is not ${version}"; exit 1; }
+          grep -q "\"version\": \"${version}\"" custom_components/a9_cam/manifest.json || { echo "manifest.json is not ${version}"; exit 1; }
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+      - run: go test -skip 'TestRTSP$' -race ./... && go test -run 'TestRTSP$' .
+        working-directory: server
+
+  binaries:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+      - name: Build
+        working-directory: server
+        run: |
+          for t in amd64: arm64: arm:6 arm:7 386:; do
+            arch="${t%%:*}"; arm="${t#*:}"
+            name="a9cam-linux-${arch}${arm:+v$arm}"
+            GOOS=linux GOARCH=$arch GOARM=$arm CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "../dist/$name" .
+          done
+          cd ../dist && sha256sum a9cam-* > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+  image:
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { arch: amd64, platform: linux/amd64 }
+          - { arch: aarch64, platform: linux/arm64 }
+          - { arch: armv7, platform: linux/arm/v7 }
+          - { arch: armhf, platform: linux/arm/v6 }
+          - { arch: i386, platform: linux/386 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: true
+          provenance: false
+          build-args: |
+            BUILD_ARCH=${{ matrix.arch }}
+            BUILD_VERSION=${{ needs.check.outputs.version }}
+          tags: |
+            ghcr.io/dbuezas/${{ matrix.arch }}-a9-cam:${{ needs.check.outputs.version }}
+            ghcr.io/dbuezas/${{ matrix.arch }}-a9-cam:latest

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A9 Cameras</title>
+  <style>
+    :root {
+      --bg: #f6f7f9; --card: #fff; --text: #1c1e21; --muted: #65676b;
+      --line: #dfe1e5; --accent: #0b6bcb; --ok: #1a7f37; --code: #eef0f3;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #111315; --card: #1b1e21; --text: #e4e6eb; --muted: #a0a4ab;
+        --line: #2f3338; --accent: #5aa7ff; --ok: #4ac26b; --code: #24282d;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #111315; --card: #1b1e21; --text: #e4e6eb; --muted: #a0a4ab;
+      --line: #2f3338; --accent: #5aa7ff; --ok: #4ac26b; --code: #24282d;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+      font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .muted { color: var(--muted); }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); margin-top: 16px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
+    .body { padding: 12px 14px; }
+    .title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .title b { font-size: 16px; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+    .dot.on { background: var(--ok); }
+    .row { margin-top: 10px; }
+    .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    code { display: block; background: var(--code); padding: 6px 8px; border-radius: 6px; font-size: 13px;
+      overflow-wrap: anywhere; user-select: all; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    button, a.btn { font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line);
+      background: var(--card); color: var(--text); cursor: pointer; text-decoration: none; }
+    button:hover, a.btn:hover { border-color: var(--accent); color: var(--accent); }
+    .empty { margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <h1>A9 Cameras</h1>
+  <div class="muted" id="status">Loading…</div>
+  <div class="grid" id="cams"></div>
+
+  <script>
+    const host = location.hostname;
+    const cmds = [
+      ["IR on", "code=202&IrLed=1"], ["IR off", "code=202&IrLed=0"],
+      ["Flip", "code=216&mirrorFlip=4"], ["No flip", "code=216&mirrorFlip=0"],
+      ["LED on", "code=210&instLed=1"], ["LED off", "code=210&instLed=0"],
+      ["Reboot", "code=299&reboot=1"],
+    ];
+    const cards = {};
+
+    function card(cam) {
+      const el = document.createElement("div");
+      el.className = "card";
+      el.innerHTML = `
+        <img alt="">
+        <div class="body">
+          <div class="title"><b></b><span class="muted state"></span></div>
+          <div class="row"><div class="label">RTSP (MJPEG + audio)</div><code class="rtsp"></code></div>
+          <div class="row"><div class="label">MJPEG</div><code class="mjpeg"></code></div>
+          <div class="row"><div class="label">Snapshot</div><code class="snap"></code></div>
+          <div class="row buttons">
+            <button class="live">Live</button>
+            <a class="btn" target="_blank" href="dev/${cam.uid}/snapshot">Snapshot</a>
+            ${cmds.map(([name, q]) => `<button data-q="${q}">${name}</button>`).join("")}
+          </div>
+        </div>`;
+      el.querySelector("b").textContent = cam.uid;
+      el.querySelector(".rtsp").textContent = `rtsp://${host}:8556/${cam.uid}`;
+      el.querySelector(".mjpeg").textContent = `http://${host}/dev/${cam.uid}/live`;
+      el.querySelector(".snap").textContent = `http://${host}/dev/${cam.uid}/snapshot`;
+      const img = el.querySelector("img");
+      const live = el.querySelector(".live");
+      live.onclick = () => {
+        const on = !img.src.includes("/live");
+        img.src = on ? `dev/${cam.uid}/live` : `dev/${cam.uid}/snapshot?t=${Date.now()}`;
+        live.textContent = on ? "Stop" : "Live";
+      };
+      el.querySelectorAll("button[data-q]").forEach(b =>
+        b.onclick = () => fetch(`dev/${cam.uid}/cmd?${b.dataset.q}`));
+      img.src = `dev/${cam.uid}/snapshot?t=${Date.now()}`;
+      return el;
+    }
+
+    async function update() {
+      let list;
+      try {
+        list = await (await fetch("dev/list")).json();
+      } catch (e) {
+        document.getElementById("status").textContent = "Server unreachable";
+        return;
+      }
+      document.getElementById("status").textContent = list.length
+        ? `${list.length} camera(s) connected`
+        : "No camera connected. Cameras retry every few minutes after a restart.";
+      const seen = new Set();
+      for (const cam of list) {
+        seen.add(cam.uid);
+        if (!cards[cam.uid]) {
+          cards[cam.uid] = card(cam);
+          document.getElementById("cams").appendChild(cards[cam.uid]);
+        }
+        const v = cam.info && cam.info.version ? ` · fw ${cam.info.version}` : "";
+        cards[cam.uid].querySelector(".state").innerHTML =
+          `<span class="dot ${cam.streaming ? "on" : ""}"></span>${cam.host}${v}`;
+      }
+      for (const uid of Object.keys(cards)) {
+        if (!seen.has(uid)) { cards[uid].remove(); delete cards[uid]; }
+      }
+    }
+
+    update();
+    setInterval(() => { if (!document.hidden) update(); }, 2000);
+  </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
-name: A9 Camera (moved)
+name: A9 Camera
 version: 3.0.0
 slug: a9-cam
-description: Moved to github.com/dbuezas/a9-camera-ha-add-on, please switch
+description: Local server for A9 / V720 mini cameras, no cloud
 url: https://github.com/dbuezas/a9-camera-ha-add-on
 image: ghcr.io/dbuezas/{arch}-a9-cam
 arch:
