@@ -45,3 +45,22 @@ async def test_hassio_discovery(hass: HomeAssistant, addon: int) -> None:
     # the same add-on again is ignored
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_HASSIO}, data=info)
     assert result["type"] is FlowResultType.ABORT
+
+    # a manual second setup is refused
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    assert result["type"] is FlowResultType.ABORT
+
+
+async def test_hassio_new_port_updates_entry(hass: HomeAssistant, addon: int) -> None:
+    """An entry made for port 80 follows the add-on to its new announced port, without a new notice."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="127.0.0.1:80", data={CONF_HOST: "127.0.0.1", CONF_PORT: 80})
+    entry.add_to_hass(hass)
+    info = HassioServiceInfo(
+        config={"host": "127.0.0.1", "port": addon}, name="A9 Camera", slug="a9-cam", uuid="x"
+    )
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_HASSIO}, data=info)
+    assert result["type"] is FlowResultType.ABORT
+    assert entry.data[CONF_PORT] == addon
+    assert entry.unique_id == DOMAIN

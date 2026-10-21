@@ -30,10 +30,11 @@ class A9ConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
+        if self._async_current_entries():
+            return self.async_abort(reason="already_configured")
         if user_input is not None:
             host, port = user_input[CONF_HOST], user_input[CONF_PORT]
-            await self.async_set_unique_id(f"{host}:{port}")
-            self._abort_if_unique_id_configured()
+            await self.async_set_unique_id(DOMAIN)
             if (error := await self._check(host, port)) is None:
                 return self.async_create_entry(title="A9 Camera", data={CONF_HOST: host, CONF_PORT: port})
             errors["base"] = error
@@ -50,10 +51,18 @@ class A9ConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_hassio(self, discovery_info: HassioServiceInfo) -> ConfigFlowResult:
-        """The add-on announced itself."""
+        """The add-on announced itself. There is one add-on, so an existing setup follows its address."""
         self._host = discovery_info.config["host"]
         self._port = discovery_info.config["port"]
-        await self.async_set_unique_id(f"{self._host}:{self._port}")
+        for entry in self._async_current_entries(include_ignore=False):
+            return self.async_update_reload_and_abort(
+                entry,
+                unique_id=DOMAIN,
+                data_updates={CONF_HOST: self._host, CONF_PORT: self._port},
+                reason="already_configured",
+                reload_even_if_entry_is_unchanged=False,
+            )
+        await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
         return await self.async_step_hassio_confirm()
 

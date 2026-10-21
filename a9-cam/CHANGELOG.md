@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.1
+
+- Integration: an existing setup follows the add-on to its new port (8557) instead of showing
+  "A9 Camera discovered" again. Only one setup is allowed.
+
 ## 3.1.0
 
 - New: Audio switch per camera. Off asks the camera for video only, so no audio leaves it (#13).
