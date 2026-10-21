@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Address of the A9 Camera add-on.",
+        "data": { "host": "Host", "port": "Port" }
+      },
+      "hassio_confirm": {
+        "description": "Set up the cameras of the A9 Camera add-on?"
+      }
+    },
+    "error": { "cannot_connect": "Cannot reach the A9 Camera add-on." },
+    "abort": { "already_configured": "Already configured." }
+  },
+  "entity": {
+    "binary_sensor": { "streaming": { "name": "Streaming" } },
+    "select": {
+      "image_quality": {
+        "name": "Image quality",
+        "state": { "low": "Low", "medium": "Medium", "high": "High" }
+      }
+    },
+    "sensor": {
+      "wifi": { "name": "WiFi network" },
+      "sd_card": {
+        "name": "SD card",
+        "state": {
+          "ok": "OK", "none": "No card", "error": "Error", "unsupported": "Unsupported file system",
+          "no_file": "No file", "corrupted": "Corrupted"
+        }
+      }
+    },
+    "switch": {
+      "infrared": { "name": "Infrared" },
+      "status_led": { "name": "Status LED" },
+      "flip": { "name": "Flip image" }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+name: A9 Camera
+version: 3.0.0
+slug: a9-cam
+description: Local server for A9 / V720 mini cameras, no cloud
+url: https://github.com/dbuezas/a9-camera-ha-add-on
+image: ghcr.io/dbuezas/{arch}-a9-cam
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: application
+host_network: true
+ingress: true
+ingress_port: 80
+panel_icon: mdi:cctv
+discovery:
+  - a9_cam
+ports:
+  80/tcp: 80
+  6123/tcp: 6123
+  6123/udp: 6123
+  8556/tcp: 8556
+ports_description:
+  80/tcp: Cloud API for the cameras, web UI, MJPEG and snapshots
+  6123/tcp: Camera control channel
+  6123/udp: Camera video and audio
+  8556/tcp: RTSP (MJPEG video + PCMA audio)
+options:
+  log_level: info
+schema:
+  log_level: list(trace|debug|info|warn|error)
