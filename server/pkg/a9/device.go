@@ -22,6 +22,8 @@ const (
 	ackInterval = 100 * time.Millisecond // the camera waits for acks to send more
 	// restart the data channel if no frame arrives for this long
 	watchdogTimeout = 5 * time.Second
+	// natBusyRetries limits the retries when the camera is still closing the previous data channel
+	natBusyRetries = 10
 	statsInterval   = 10 * time.Second
 	// base info holds the battery level, so ask for it from time to time
 	infoInterval = time.Minute
@@ -67,6 +69,7 @@ type session struct {
 	opened    bool // sent "open audio and video"
 	switched  bool // sent "video only" after the first frame
 	natAt     time.Time
+	natBusy   int // data channel requests refused since the last frame
 	lastFrame time.Time
 	pids      []uint32 // received since the last ack
 	acking    bool
@@ -332,6 +335,24 @@ func (d *Device) handleTCPMessage(pkt *Packet) {
 
 	switch msg.Code {
 	case CodeNatRsp:
+		if msg.Status == 500 {
+			// the camera is still closing the previous data channel (quick close and reopen),
+			// ask again soon instead of waiting for the watchdog (intx82/a9-v720#55)
+			d.mu.Lock()
+			if s := d.session; s != nil && s.natBusy < natBusyRetries {
+				s.natBusy++
+				d.log.Debug().Int("retry", s.natBusy).Msg("[a9] data channel busy, retrying")
+				time.AfterFunc(time.Second, func() {
+					d.mu.Lock()
+					if d.session == s {
+						d.requestNAT(s)
+					}
+					d.mu.Unlock()
+				})
+			}
+			d.mu.Unlock()
+			return
+		}
 		d.log.Debug().Msgf("[a9] data channel from %s:%d", msg.DevNatIP, msg.DevNatPort)
 
 	case CodeForward:
@@ -409,6 +430,7 @@ func (d *Device) handleUDP(addr *net.UDPAddr, pkt *Packet) {
 			break
 		}
 		s.lastFrame = time.Now()
+		s.natBusy = 0
 		s.acking = true
 		d.lastFrame, d.lastFrameAt = frame, s.lastFrame
 		videoOnly := !s.switched && !d.srv.settings.get(d.UID).Audio

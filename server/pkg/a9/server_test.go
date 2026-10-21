@@ -149,6 +149,28 @@ func TestWatchdog(t *testing.T) {
 	require.Eventually(t, func() bool { return cam.NATs.Load() >= 2 }, 8*time.Second, 50*time.Millisecond)
 }
 
+func TestNATBusy(t *testing.T) {
+	srv, addr := startServer(t)
+	cam, err := fakecam.Dial(addr, "0800c0035826")
+	require.NoError(t, err)
+	defer cam.Close()
+	cam.NATBusy.Store(2)
+
+	dev := waitDevice(t, srv, "0800c0035826")
+	video := make(chan []byte, 100)
+	sub := &a9.Subscriber{OnVideo: func(b []byte) { video <- b }}
+	dev.Subscribe(sub)
+	defer dev.Unsubscribe(sub)
+
+	// two retries after 1 s each, well before the 5 s watchdog
+	select {
+	case <-video:
+	case <-time.After(4 * time.Second):
+		t.Fatal("no video")
+	}
+	require.EqualValues(t, 3, cam.NATs.Load())
+}
+
 func TestReconnect(t *testing.T) {
 	srv, addr := startServer(t)
 	cam, err := fakecam.Dial(addr, "0800c0035826")

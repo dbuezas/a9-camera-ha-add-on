@@ -91,7 +91,9 @@ func (a *assembler) join() []byte {
 	}
 	frame = frame[:len(frame)-trailerSize]
 
-	if len(frame) != want || len(frame) < 4 || frame[0] != 0xFF || frame[1] != 0xD8 {
+	// a JPEG starts with FF D8 and ends with FF D9
+	if len(frame) != want || len(frame) < 4 || frame[0] != 0xFF || frame[1] != 0xD8 ||
+		frame[want-2] != 0xFF || frame[want-1] != 0xD9 {
 		return nil
 	}
 	return frame

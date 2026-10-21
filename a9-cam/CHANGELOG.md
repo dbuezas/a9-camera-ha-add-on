@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.1.4
+
+- Faster stream start: when the camera answers "busy" (it is still closing the previous stream),
+  the add-on asks again every second instead of waiting 5 seconds.
+- Frames without the JPEG end marker are dropped, so a broken frame does not show up as a grey image.
+- Status LED switch: also sends code 220 (`ledEI`), which newer firmware uses instead of 210.
+- Docs: also redirect `*.naxclow.com.cn`, and links for other cameras sold as "A9".
+
 ## 3.1.3
 
 - Newer firmware (2024 and later) first asks `getDevInfo`. The add-on now gives the answer that

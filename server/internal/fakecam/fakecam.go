@@ -39,6 +39,7 @@ type Cam struct {
 	AudioSent atomic.Int32
 	Closes    atomic.Int32
 	NATs      atomic.Int32
+	NATBusy   atomic.Int32 // answer this many data channel requests with "busy" (status 500)
 	Commands  chan map[string]any // forwarded commands other than the protocol ones
 
 	state map[string]any // settings reported in base info
@@ -133,6 +134,11 @@ func (c *Cam) readTCP() {
 		switch code(msg) {
 		case a9.CodeNatReq:
 			c.NATs.Add(1)
+			if c.NATBusy.Add(-1) >= 0 {
+				c.sendTCP(map[string]any{"code": a9.CodeNatRsp, "status": 500})
+				continue
+			}
+			c.NATBusy.Store(0)
 			c.openUDP()
 		case a9.CodeForward:
 			content, _ := msg["content"].(map[string]any)

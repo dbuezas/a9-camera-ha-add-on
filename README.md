@@ -18,7 +18,18 @@ and `202303131805`. Newer firmware (2024 and later) is supported since 3.1.3, bu
 If yours does not work, please open an issue with the add-on log.
 
 "A9" is a name used for many different cameras with different chips and apps. If yours uses another app,
-this project will not work with it.
+this project will not work with it. The camera's own WiFi network (before setup) is called `Nax_...`.
+
+### Other "A9" cameras
+
+| Your camera | Try this |
+| --- | --- |
+| YsxLite and other PPPP apps | [devbis/pppp_camera](https://github.com/devbis/pppp_camera) (HACS integration) or [DavidVentura/cam-reverse](https://github.com/DavidVentura/cam-reverse) |
+| XCThings / Linklemo | [zkiiito/A9](https://github.com/zkiiito/A9) |
+| XF16 / XR872 board, open firmware (needs flashing) | [divadiow/XF16Cam](https://github.com/divadiow/XF16Cam) |
+| BK7252 board, open firmware (needs flashing) | [Apache02/bk7252-cam](https://github.com/Apache02/bk7252-cam) |
+
+I did not test these projects.
 
 ## Setup
 
@@ -26,6 +37,8 @@ this project will not work with it.
 2. **Point `*.naxclow.com` to your Home Assistant IP.** For example with the AdGuard Home add-on:
    Filters → DNS rewrites → `*.naxclow.com` → your HA IP. Your router must give AdGuard as the DNS
    server, at least to the cameras. Do this after step 1: the app needs the real cloud.
+   Newer firmware also calls `*.naxclow.com.cn`. Point it to your HA IP too: then the camera cannot
+   install firmware updates, which could stop it from working with this add-on.
 3. **Install the add-on:**
    [![Add repository](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fdbuezas%2Fa9-camera-ha-add-on)
    then install and start **A9 Camera**.

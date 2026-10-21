@@ -8,6 +8,7 @@ The cameras connect to it instead of China, and it serves their video and audio 
 1. Connect the camera to your WiFi (with the V720 app, or see https://github.com/intx82/a9-v720).
 2. Point `*.naxclow.com` to the IP of your Home Assistant machine.
    With the AdGuard add-on: Filters → DNS rewrites → `*.naxclow.com` → your HA IP.
+   Do the same for `*.naxclow.com.cn`: newer firmware uses it, for example for firmware updates.
    Your router must give AdGuard as the DNS server to the cameras.
 3. Install and start this add-on.
 4. Restart the cameras, or wait. After a server restart a camera can take up to about 10 minutes to

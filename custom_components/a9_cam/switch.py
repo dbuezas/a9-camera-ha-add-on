@@ -20,13 +20,17 @@ class A9SwitchDescription(SwitchEntityDescription):
     field: str  # base info field, also the command field
     on: int = 1
     off: int = 0
+    # another command with the same values, for other firmware versions
+    alt_code: int | None = None
+    alt_field: str | None = None
 
 
 SWITCHES = [
     A9SwitchDescription(key="infrared", translation_key="infrared", code=202, field="IrLed"),
     A9SwitchDescription(
+        # newer firmware ignores instLed and uses ledEI, older firmware ignores ledEI
         key="status_led", translation_key="status_led", code=210, field="instLed",
-        entity_category=EntityCategory.CONFIG,
+        alt_code=220, alt_field="ledEI", entity_category=EntityCategory.CONFIG,
     ),
     # the app only uses 0 (normal) and 4 (upside down)
     A9SwitchDescription(
@@ -56,18 +60,25 @@ class A9Switch(A9Entity, SwitchEntity):
 
     @property
     def is_on(self) -> bool | None:
-        value = self.info.get(self.entity_description.field)
+        d = self.entity_description
+        value = self.info.get(d.field)
+        if value is None and d.alt_field:
+            value = self.info.get(d.alt_field)
         if value is None:
             return None
         return value != self.entity_description.off
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        d = self.entity_description
-        await self.send({"code": d.code, d.field: d.on})
+        await self._set(self.entity_description.on)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._set(self.entity_description.off)
+
+    async def _set(self, value: int) -> None:
         d = self.entity_description
-        await self.send({"code": d.code, d.field: d.off})
+        await self.send({"code": d.code, d.field: value})
+        if d.alt_code is not None:
+            await self.send({"code": d.alt_code, d.alt_field: value})
 
 
 class A9Audio(A9Entity, SwitchEntity):
