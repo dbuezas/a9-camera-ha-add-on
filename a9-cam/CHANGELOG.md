@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.3
+
+- Newer firmware (2024 and later) first asks `getDevInfo`. The add-on now gives the answer that
+  works (thanks to 0x3dlux in intx82/a9-v720#51), so these cameras can go on to connect.
+
 ## 3.1.2
 
 - Fix: with Audio off, the camera sent no video. Cameras do not start a stream in "video only" mode,

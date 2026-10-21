@@ -25,9 +25,18 @@ func (s *Server) HandleAPI(w http.ResponseWriter, r *http.Request) {
 
 	case "ApiSysDevicesBatch/confirm", "ApiSysDevices/a9bindingAppDevice":
 
-	case "ApiServer/getA9ConfCheck", "ApiSysDevices/getDevInfo":
-		// tells the camera where its TCP server is.
-		// getDevInfo comes from newer firmware (issue #16), its answer format is a guess.
+	case "ApiSysDevices/getDevInfo":
+		// newer firmware (2024+) asks this first, then calls getA9ConfCheck.
+		// userInfo_state is required (intx82/a9-v720#51), null ota fields mean no update.
+		data = Obj{
+			{"userInfo_state", 1},
+			{"ota_url", nil},
+			{"ota_version", nil},
+		}
+		s.Log.Info().Str("uid", r.URL.Query().Get("devicesCode")).Str("addr", r.RemoteAddr).Msg("[a9] dev info")
+
+	case "ApiServer/getA9ConfCheck":
+		// tells the camera where its TCP server is
 		uid := r.URL.Query().Get("devicesCode")
 		data = Obj{
 			{"tcpPort", s.TCPPort},

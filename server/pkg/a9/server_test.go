@@ -307,6 +307,5 @@ func TestAPIGetDevInfo(t *testing.T) {
 	b, _ := io.ReadAll(res.Body)
 	res.Body.Close()
 	require.Equal(t, 200, res.StatusCode)
-	require.Contains(t, string(b), `"uid":"5c0015012C00"`)
-	require.Contains(t, string(b), `"tcpPort":6123`)
+	require.JSONEq(t, `{"code":200,"message":"OK","data":{"userInfo_state":1,"ota_url":null,"ota_version":null}}`, string(b))
 }

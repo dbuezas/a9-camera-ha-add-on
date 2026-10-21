@@ -14,7 +14,8 @@ It has two parts, both in this repository:
 ## Which cameras work
 
 Cameras that use the **V720** app and connect to `*.naxclow.com`. Tested with firmware `202302031142`
-and `202303131805`. Reports say newer firmware (from late 2024) may not accept a local server.
+and `202303131805`. Newer firmware (2024 and later) is supported since 3.1.3, but I could not test it myself.
+If yours does not work, please open an issue with the add-on log.
 
 "A9" is a name used for many different cameras with different chips and apps. If yours uses another app,
 this project will not work with it.
