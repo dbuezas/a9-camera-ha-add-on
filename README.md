@@ -44,13 +44,20 @@ For each camera, a device with:
 | Camera | Live MJPEG video and snapshots |
 | Infrared / Status LED / Flip image switches | Camera settings, applied and confirmed by the camera |
 | Audio switch | Off: the camera sends video only, its audio never leaves it |
-| Image orientation | Flip and mirror the image |
+| Image quality | JPEG quality: low, medium or high |
 | Battery | Battery level |
+| WiFi network / SD card | The WiFi the camera uses, and the SD card state |
 | Streaming | On while somebody watches |
 | Reboot | Restarts the camera |
 
 The camera only sends video while somebody watches, so it saves battery. Dashboard pictures reuse
 a recent frame instead of waking the camera every few seconds.
+
+## Camera ID
+
+Each camera has an ID, for example `0800c0035826`. To find it, open the add-on page and click
+**Open web UI**. Each connected camera shows up there with its ID and its URLs, ready to copy.
+Replace `CAMERA_ID` below with that ID.
 
 ## go2rtc and WebRTC
 
