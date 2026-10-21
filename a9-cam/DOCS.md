@@ -1,11 +1,23 @@
-# a9 add on
+# This add-on moved
 
-This addon https://github.com/dbuezas/a9-camera-ha-add-on
+**New home: https://github.com/dbuezas/a9-camera-ha-add-on**
 
-Python code derived from https://github.com/intx82/a9-v720/ with these changes:
+This entry in `dbuezas/ha-addons` gets no more updates. Please switch:
 
-- Added endpoint for a combined audio+video stream via ffmpeg
-- Removed all features not strictly required for streaming video
-- Removed all dependencies not needed for streaming video (particularly open-cv, which doesn't run in alpine)
+1. Note your camera IDs in the add-on web UI.
+2. Settings → Add-ons → Add-on store → ⋮ → Repositories → add
+   `https://github.com/dbuezas/a9-camera-ha-add-on`.
+3. Uninstall this add-on, then install **A9 Camera** from the new repository and start it.
+4. Install the **A9 Camera** integration from HACS (same repository). It finds the add-on by itself and
+   adds each camera as a device with live video, switches and sensors.
 
-All credit for reverse engineer this camera's protocol: https://github.com/intx82/a9-v720/
+Version 3 is a rewrite: no Python, no FFmpeg, much more reliable.
+
+If you used go2rtc with `/dev/CAMERA_ID/go2rtc-stream`, that URL is gone. Use:
+
+```yaml
+streams:
+  a9_camera: ffmpeg:rtsp://127.0.0.1:8556/CAMERA_ID#video=h264#audio=copy
+```
+
+Full documentation: https://github.com/dbuezas/a9-camera-ha-add-on/blob/main/a9-cam/DOCS.md
