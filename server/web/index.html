@@ -80,15 +80,61 @@
       el.querySelector(".snap").textContent = `http://${host}:8557/dev/${cam.uid}/snapshot`;
       const img = el.querySelector("img");
       const live = el.querySelector(".live");
+      let stop = null;
       live.onclick = () => {
-        const on = !img.src.includes("/live");
-        img.src = on ? `dev/${cam.uid}/live` : `dev/${cam.uid}/snapshot?t=${Date.now()}`;
-        live.textContent = on ? "Stop" : "Live";
+        if (stop) { stop(); return; }
+        stop = play(img, cam.uid, () => {
+          stop = null;
+          live.textContent = "Live";
+          img.src = `dev/${cam.uid}/snapshot?t=${Date.now()}`;
+        });
+        live.textContent = "Stop";
       };
       el.querySelectorAll("button[data-q]").forEach(b =>
         b.onclick = () => fetch(`dev/${cam.uid}/cmd?${b.dataset.q}`));
       img.src = `dev/${cam.uid}/snapshot?t=${Date.now()}`;
       return el;
+    }
+
+    // Shows the live stream in img. Not <img src=live>: HA ingress compresses multipart
+    // responses and drops the boundary, so nothing would show. Reads the parts here instead.
+    // Returns a function that stops it; onEnd runs once when it ends.
+    function play(img, uid, onEnd) {
+      const ctrl = new AbortController();
+      const dec = new TextDecoder();
+      let url = null;
+      (async () => {
+        const res = await fetch(`dev/${uid}/live?raw`, { signal: ctrl.signal });
+        if (!res.ok) throw new Error(res.status);
+        const reader = res.body.getReader();
+        let buf = new Uint8Array(0);
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const b = new Uint8Array(buf.length + value.length);
+          b.set(buf); b.set(value, buf.length); buf = b;
+          // each part: "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: N\r\n\r\n" JPEG "\r\n"
+          for (;;) {
+            let end = -1;
+            for (let i = 0; i + 3 < buf.length; i++) {
+              if (buf[i] === 13 && buf[i + 1] === 10 && buf[i + 2] === 13 && buf[i + 3] === 10) { end = i; break; }
+            }
+            if (end < 0) break;
+            const m = dec.decode(buf.subarray(0, end)).match(/Content-Length: (\d+)/i);
+            const len = m ? +m[1] : 0;
+            if (buf.length < end + 4 + len + 2) break;
+            const jpeg = buf.slice(end + 4, end + 4 + len);
+            buf = buf.slice(end + 4 + len + 2);
+            if (url) URL.revokeObjectURL(url);
+            url = URL.createObjectURL(new Blob([jpeg], { type: "image/jpeg" }));
+            img.src = url;
+          }
+        }
+      })().catch(() => {}).finally(() => {
+        if (url) URL.revokeObjectURL(url);
+        onEnd();
+      });
+      return () => ctrl.abort();
     }
 
     async function update() {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.1.7
+
+- Fix: the Live button in the add-on page showed nothing (#17). Home Assistant's add-on panel
+  compresses the MJPEG stream and removes its boundary, so the browser got no pictures. The page
+  now reads the stream itself and shows each picture.
+
 ## 3.1.6
 
 - Fix: WebRTC (go2rtc) often froze on the first frame until a reconnect. FFmpeg guesses the frame

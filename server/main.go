@@ -181,7 +181,13 @@ func apiMJPEG(w http.ResponseWriter, r *http.Request) {
 	h.Set("Connection", "close")
 	h.Set("Pragma", "no-cache")
 
-	_, _ = cons.WriteTo(mjpeg.NewWriter(w))
+	mw := mjpeg.NewWriter(w)
+	// ?raw: same body, but HA ingress compresses multipart and drops its boundary,
+	// so the web UI reads this type and splits the frames itself
+	if r.URL.Query().Has("raw") {
+		h.Set("Content-Type", "application/octet-stream")
+	}
+	_, _ = cons.WriteTo(mw)
 
 	log.Debug().Str("uid", uid).Str("addr", r.RemoteAddr).Msg("[http] mjpeg stop")
 }

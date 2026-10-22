@@ -150,6 +150,20 @@ func TestHTTPMJPEG(t *testing.T) {
 	require.Eventually(t, func() bool { return cam.Closes.Load() == 1 }, time.Second, 10*time.Millisecond)
 }
 
+// ?raw is for the web UI behind HA ingress: same parts, a content type HA does not touch
+func TestHTTPMJPEGRaw(t *testing.T) {
+	cam, uid, url := setup(t)
+
+	res, err := http.Get(url + "/dev/" + uid + "/live?raw")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, "application/octet-stream", res.Header.Get("Content-Type"))
+	part, err := multipart.NewReader(res.Body, "frame").NextPart()
+	require.NoError(t, err)
+	b, _ := io.ReadAll(part)
+	require.True(t, bytes.Equal(b, cam.Frames[0]) || bytes.Equal(b, cam.Frames[1]))
+}
+
 // The camera disconnects while a viewer watches: the viewer must be closed, not hang
 func TestHTTPMJPEGCameraGone(t *testing.T) {
 	cam, uid, url := setup(t)
