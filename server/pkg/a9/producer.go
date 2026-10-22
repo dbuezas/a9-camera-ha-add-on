@@ -27,18 +27,20 @@ func (p *Producer) Unlock() { p.mu.Unlock() }
 
 var ErrNotConnected = errors.New("a9: camera not connected")
 
-// minFrameGap is the smallest time between two video frames, in 90 kHz units (50 ms).
-// Frames closer together are dropped: FFmpeg needs a growing time for each frame.
-const minFrameGap = 90000 / 20
+// frameStep is one frame at the camera's 10 fps, in 90 kHz units
+const frameStep = 90000 / 10
 
-// videoTS gives a frame its arrival time. The camera sends a burst of old frames when a stream
-// starts. Times that run ahead of the clock make players hold the video back (a frozen picture),
-// so the time is never moved forward; frames too close to the previous one are dropped.
-func videoTS(prev, now uint32) (uint32, bool) {
-	if prev != 0 && now < prev+minFrameGap {
-		return 0, false
+// videoTS gives a frame its arrival time, rounded to whole frames (10 fps), and at least one
+// frame after the previous one. FFmpeg guesses the frame rate from the first frames: with
+// irregular times it sometimes guesses 90000 fps and then sends hundreds of copies of each
+// frame, which freezes WebRTC players. Whole frame steps make it guess 10 fps.
+// After a burst the times run ahead of the clock for a moment, then the clock catches up.
+func videoTS(prev uint32, first bool, now uint32) uint32 {
+	ts := (now + frameStep/2) / frameStep * frameStep
+	if !first && ts < prev+frameStep {
+		ts = prev + frameStep
 	}
-	return now, true
+	return ts
 }
 
 // audioTS gives an audio packet its time: the previous time plus its length, or the clock
@@ -110,7 +112,9 @@ func (p *Producer) write(kind string, pkt *rtp.Packet) {
 
 // Start blocks until Stop or until the camera disconnects
 func (p *Producer) Start() error {
-	start := time.Now()
+	// times start at the first video frame. Audio before it is dropped: FFmpeg would fill
+	// the gap with copies of the first frame and send them as one burst.
+	var start time.Time
 	var lastVideo uint32
 	var audioSeq uint16
 	var nextAudio uint32
@@ -118,10 +122,11 @@ func (p *Producer) Start() error {
 	sub := &Subscriber{
 		OnVideo: func(jpeg []byte) {
 			p.Recv += len(jpeg)
-			ts, ok := videoTS(lastVideo, uint32(time.Since(start)*90000/time.Second))
-			if !ok {
-				return
+			first := start.IsZero()
+			if first {
+				start = time.Now()
 			}
+			ts := videoTS(lastVideo, first, uint32(time.Since(start)*90000/time.Second))
 			lastVideo = ts
 			p.write(core.KindVideo, &rtp.Packet{
 				Header:  rtp.Header{Timestamp: ts},
@@ -130,6 +135,9 @@ func (p *Producer) Start() error {
 		},
 		OnAudio: func(alaw []byte) {
 			p.Recv += len(alaw)
+			if start.IsZero() {
+				return
+			}
 			ts := audioTS(nextAudio, uint32(time.Since(start)*8000/time.Second), len(alaw))
 			audioSeq++
 			p.write(core.KindAudio, &rtp.Packet{

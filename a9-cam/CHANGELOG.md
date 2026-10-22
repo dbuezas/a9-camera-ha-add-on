@@ -1,10 +1,16 @@
 # Changelog
 
+## 3.1.6
+
+- Fix: WebRTC (go2rtc) often froze on the first frame until a reconnect. FFmpeg guesses the frame
+  rate from the first frames, and with irregular times it sometimes guessed 90000 fps and sent
+  hundreds of copies of each frame. Video times are now whole frames (10 fps), so the guess is right.
+- Times start at the first video frame. Audio before it is dropped, so FFmpeg does not fill the
+  start with copies of the first frame.
+
 ## 3.1.5
 
-- Fix: WebRTC (go2rtc) often showed only the first frame when audio was on. When a stream starts,
-  the camera sends a burst of frames, and their times ran 2-3 s ahead of the audio. Video and audio
-  times now follow the clock.
+- Video and audio times follow the clock. (This did not fix the WebRTC freeze, 3.1.6 does.)
 
 ## 3.1.4
 

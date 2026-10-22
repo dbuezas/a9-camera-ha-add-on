@@ -7,17 +7,14 @@ import (
 )
 
 func TestVideoTS(t *testing.T) {
-	// a burst of frames 10 ms apart, then 140 ms apart: times stay on the clock
+	// a burst 10 ms apart, then irregular gaps: always whole frames (9000), never backwards
+	var got []uint32
 	var prev uint32
-	var kept []uint32
-	for _, ms := range []uint32{100, 110, 120, 160, 300, 440} {
-		if ts, ok := videoTS(prev, ms*90); ok {
-			prev = ts
-			kept = append(kept, ms)
-		}
+	for i, ms := range []uint32{0, 10, 20, 30, 140, 470, 520, 760} {
+		prev = videoTS(prev, i == 0, ms*90)
+		got = append(got, prev/frameStep)
 	}
-	require.Equal(t, []uint32{100, 160, 300, 440}, kept)
-	require.Equal(t, uint32(440*90), prev)
+	require.Equal(t, []uint32{0, 1, 2, 3, 4, 5, 6, 8}, got)
 }
 
 func TestAudioTS(t *testing.T) {
