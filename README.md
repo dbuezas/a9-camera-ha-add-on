@@ -2,7 +2,7 @@
 
 Use the cheap A9 / V720 "Naxclow" mini WiFi cameras in Home Assistant, fully local, without their cloud.
 
-<img width="560" alt="Add-on web UI with two cameras, their IDs and URLs" src="docs/webui.png">
+<img width="560" alt="Add-on web UI with two cameras, their IDs and URLs" src="https://raw.githubusercontent.com/dbuezas/a9-camera-ha-add-on/main/docs/webui.png">
 
 It has two parts, both in this repository:
 
