@@ -53,6 +53,9 @@ I did not test these projects.
 
 For each camera, a device with:
 
+<img width="640" alt="A camera device in Home Assistant with its entities" src="https://raw.githubusercontent.com/dbuezas/a9-camera-ha-add-on/main/docs/device.png">
+
+
 | Entity | What it does |
 | --- | --- |
 | Camera | Live MJPEG video and snapshots |
