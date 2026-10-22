@@ -9,5 +9,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/dbuezas/a9-camera-ha-add-on/issues",
   "requirements": [],
-  "version": "3.1.4"
+  "version": "3.1.5"
 }

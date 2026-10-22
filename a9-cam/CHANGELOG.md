@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.1.5
+
+- Fix: WebRTC (go2rtc) often showed only the first frame when audio was on. When a stream starts,
+  the camera sends a burst of frames, and their times ran 2-3 s ahead of the audio. Video and audio
+  times now follow the clock.
+
 ## 3.1.4
 
 - Faster stream start: when the camera answers "busy" (it is still closing the previous stream),

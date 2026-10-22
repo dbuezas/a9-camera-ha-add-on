@@ -1,5 +1,5 @@
 name: A9 Camera
-version: 3.1.4
+version: 3.1.5
 slug: a9-cam
 description: Local server for A9 / V720 mini cameras, no cloud
 url: https://github.com/dbuezas/a9-camera-ha-add-on
