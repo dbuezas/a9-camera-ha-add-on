@@ -21,6 +21,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           grep -q "^version: ${version}$" a9-cam/config.yaml || { echo "a9-cam/config.yaml is not ${version}"; exit 1; }
           grep -q "\"version\": \"${version}\"" custom_components/a9_cam/manifest.json || { echo "manifest.json is not ${version}"; exit 1; }
+          grep -q "^## ${version}$" a9-cam/CHANGELOG.md || { echo "a9-cam/CHANGELOG.md has no ${version} section"; exit 1; }
           echo "version=${version}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v5
         with:
@@ -45,9 +46,12 @@ jobs:
             GOOS=linux GOARCH=$arch GOARM=$arm CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "../dist/$name" .
           done
           cd ../dist && sha256sum a9cam-* > SHA256SUMS
+      - name: Release notes from the changelog
+        run: awk -v v="## ${GITHUB_REF_NAME#v}" '$0 == v {on = 1; next} /^## / {on = 0} on' a9-cam/CHANGELOG.md > notes.md
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          body_path: notes.md
           generate_release_notes: true
 
   image:
